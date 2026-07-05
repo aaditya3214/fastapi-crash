@@ -1,0 +1,739 @@
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+
+const API_BASE_URL = 'http://localhost:8080';
+
+export default function MarketDashboard({ onNavigate, profile, onLogout, onNavigateReset }) {
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [activeView, setActiveView] = useState('pdf'); // 'pdf' | 'stocks'
+  const [stocks, setStocks] = useState([]);
+  const [loadingStocks, setLoadingStocks] = useState(false);
+
+  // Stock Search / Results API states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResult, setSearchResult] = useState(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState(null);
+  const [activeFilingTab, setActiveFilingTab] = useState('quarterly'); // 'quarterly' | 'half_yearly' | 'annual'
+
+  const handleSearch = async (e) => {
+    if (e) e.preventDefault();
+    if (!searchQuery.trim()) return;
+
+    setSearchLoading(true);
+    setSearchError(null);
+    try {
+      const response = await axios.get(`${API_BASE_URL}/nse/search/${searchQuery.trim().toUpperCase()}`);
+      setSearchResult(response.data.data);
+    } catch (err) {
+      console.error(err);
+      setSearchError(err.response?.data?.detail || 'Failed to fetch stock results. Please try again.');
+      setSearchResult(null);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const formatNumber = (num, isCurrency = true) => {
+    if (num === null || num === undefined || num === '') return '—';
+    const val = parseFloat(num);
+    if (isNaN(val)) return num;
+    
+    // In NSE corporate results, values are typically reported in Lakhs.
+    // Convert Lakhs to Crores if large enough.
+    if (isCurrency) {
+      // 100 Lakhs = 1 Crore
+      if (Math.abs(val) >= 100) {
+        return `₹ ${(val / 100).toFixed(2)} Cr`;
+      }
+      return `₹ ${val.toFixed(2)} Lakhs`;
+    }
+    return val.toLocaleString('en-IN');
+  };
+
+
+  useEffect(() => {
+    if (activeView === 'stocks') {
+      fetchStocks();
+    }
+  }, [activeView]);
+
+  const fetchStocks = async () => {
+    setLoadingStocks(true);
+    try {
+      const res = await axios.get(`${API_BASE_URL}/stocks`);
+      setStocks(res.data.data || []);
+    } catch (err) {
+      console.error('Failed to fetch stocks:', err);
+    } finally {
+      setLoadingStocks(false);
+    }
+  };
+
+  const navItems = [
+    {
+      id: 'pdf',
+      label: 'PDF Analyser',
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+      ),
+    },
+    {
+      id: 'stocks',
+      label: 'Stock List',
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v18h18M7 16l4-4 4 4 6-6" />
+        </svg>
+      ),
+    },
+  ];
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '—';
+    return new Date(dateStr).toLocaleDateString('en-IN', {
+      day: '2-digit', month: 'short', year: 'numeric',
+    });
+  };
+
+  return (
+    <div className="flex h-screen w-screen overflow-hidden bg-[#F8F9FA] text-slate-800 font-sans">
+
+      {/* Sidebar */}
+      <aside className="w-64 bg-white border-r border-slate-200 flex flex-col justify-between p-4 flex-shrink-0 select-none">
+        <div className="space-y-6">
+          {/* Logo */}
+          <div onClick={() => onNavigate('/')} className="flex items-center gap-2 px-2 py-1 cursor-pointer">
+            <svg className="w-6 h-6 text-slate-800" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v18h18M7 16l4-4 4 4 6-6" />
+            </svg>
+            <span className="text-base font-bold tracking-tight text-slate-800">Stock Analysis AI</span>
+          </div>
+
+          {/* Nav Items */}
+          <nav className="space-y-1">
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setActiveView(item.id)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-semibold transition-all text-sm cursor-pointer ${
+                  activeView === item.id
+                    ? 'bg-slate-100 text-slate-900'
+                    : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                }`}
+              >
+                <span className={activeView === item.id ? 'text-slate-800' : 'text-slate-400'}>
+                  {item.icon}
+                </span>
+                {item.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        {/* Sidebar Footer */}
+        <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl">
+          <span className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider">Market Status</span>
+          <div className="flex items-center gap-1.5 mt-1">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span className="text-xs font-extrabold text-slate-700">Markets Open</span>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col overflow-hidden bg-[#F8F9FA]">
+
+        {/* Top Header Bar */}
+        <header className="h-14 bg-white border-b border-slate-200/80 flex items-center justify-between px-6 flex-shrink-0 select-none">
+          <div />
+          <div
+            onClick={() => setIsProfileOpen(true)}
+            className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+          >
+            <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-800 border border-slate-200 flex items-center justify-center font-bold text-xs shadow-sm">
+              {profile?.username?.substring(0, 2).toUpperCase() || 'US'}
+            </div>
+            <div className="flex flex-col text-left">
+              <span className="text-xs font-black text-slate-800 leading-tight">{profile?.full_name || 'User'}</span>
+              <span className="text-[10px] font-bold text-slate-400 leading-tight">@{profile?.username || 'user'}</span>
+            </div>
+          </div>
+        </header>
+
+        {/* Content Area */}
+        <div className="flex-1 overflow-y-auto p-6">
+
+          {/* PDF Analyser View (Stock search & results) */}
+          {activeView === 'pdf' && (
+            <div className="space-y-6 animate-fadeIn">
+                  {/* Search Bar Header */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+                    <h2 className="text-base font-black text-slate-800 mb-1">Corporate Results & Stock Analyser</h2>
+                    <p className="text-xs text-slate-400 mb-4">Search any NSE stock symbol to fetch live corporate results and financial data.</p>
+                    
+                    <form onSubmit={handleSearch} className="flex gap-2">
+                      <div className="relative flex-1">
+                        <input
+                          type="text"
+                          placeholder="Enter stock symbol (e.g. RELIANCE, TCS, HDFCBANK)..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium text-sm focus:outline-none focus:border-slate-400 focus:bg-white transition-all placeholder:text-slate-400"
+                        />
+                        <svg className="w-5 h-5 text-slate-400 absolute left-3.5 top-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={searchLoading}
+                        className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-sm transition-all disabled:opacity-50 cursor-pointer shadow-sm"
+                      >
+                        {searchLoading ? 'Searching...' : 'Search'}
+                      </button>
+                    </form>
+
+                    {searchError && (
+                      <div className="mt-3 p-3 bg-rose-50 border border-rose-100 rounded-xl text-rose-600 text-xs font-semibold flex items-center gap-2">
+                        <svg className="w-4 h-4 text-rose-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        {searchError}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Initial State / No stock searched yet */}
+                  {!searchResult && !searchLoading && (
+                    <div className="flex flex-col items-center justify-center py-20 text-center bg-white border border-slate-200/80 rounded-2xl">
+                      <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-150 flex items-center justify-center mb-4">
+                        <svg className="w-7 h-7 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <h3 className="text-sm font-bold text-slate-700 mb-1">No Stock Searched</h3>
+                      <p className="text-xs text-slate-400 max-w-sm">Use the search bar above to fetch corporate financial statements directly from NSE.</p>
+                    </div>
+                  )}
+
+                  {/* Loading State */}
+                  {searchLoading && (
+                    <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-6">
+                      {/* Skeleton Header */}
+                      <div className="flex justify-between items-start animate-pulse">
+                        <div className="space-y-2">
+                          <div className="h-6 w-48 bg-slate-100 rounded-md"></div>
+                          <div className="h-4 w-32 bg-slate-50 rounded-md"></div>
+                        </div>
+                        <div className="h-8 w-24 bg-slate-150 rounded-lg"></div>
+                      </div>
+                      
+                      {/* Skeleton Cards */}
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 animate-pulse">
+                        {[1, 2, 3, 4].map((i) => (
+                          <div key={i} className="h-24 bg-slate-50 border border-slate-100 rounded-xl"></div>
+                        ))}
+                      </div>
+
+                      {/* Skeleton Table */}
+                      <div className="space-y-3 animate-pulse">
+                        <div className="h-4 bg-slate-100 rounded w-full"></div>
+                        <div className="h-10 bg-slate-50 rounded w-full"></div>
+                        <div className="h-10 bg-slate-50 rounded w-full"></div>
+                        <div className="h-10 bg-slate-50 rounded w-full"></div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Results Dashboard */}
+              {searchResult && !searchLoading && (
+                <div className="space-y-6">
+                  
+                  {/* Company Info Header */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                      <div className="flex items-center gap-3">
+                        <h1 className="text-xl font-black text-slate-800">{searchResult.company_name}</h1>
+                        <span className="px-2.5 py-0.5 bg-slate-100 text-slate-700 border border-slate-200/40 rounded-lg text-xs font-black tracking-wide">
+                          {searchResult.symbol}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleSearch()}
+                          disabled={searchLoading}
+                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg text-xs font-bold transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1"
+                        >
+                          🔄 Refresh
+                        </button>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1">NSE India Corporate Filings & Financial Results Dashboard</p>
+                    </div>
+
+                    {searchResult.quote ? (
+                      <div className="bg-slate-50 border border-slate-200/60 rounded-xl px-4 py-2 flex items-center gap-4">
+                        <div>
+                          <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Last Traded Price</span>
+                          <span className="text-base font-black text-slate-800">
+                            ₹ {searchResult.quote.priceInfo?.lastPrice?.toLocaleString('en-IN') || '—'}
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Change</span>
+                          <span className={`text-xs font-bold ${searchResult.quote.priceInfo?.change >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            {searchResult.quote.priceInfo?.change >= 0 ? '+' : ''}
+                            {searchResult.quote.priceInfo?.change?.toFixed(2) || '0.00'} ({searchResult.quote.priceInfo?.pChange?.toFixed(2)}%)
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="px-3.5 py-1.5 bg-amber-50 border border-amber-100 rounded-lg text-amber-700 text-xs font-semibold">
+                        ⚠️ Live price unavailable. Showing financial results only.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Latest Quarter Financial Cards */}
+                  {searchResult.past_results?.resCmpData?.length > 0 && (
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      {/* Total Income */}
+                      <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Income</span>
+                        <div className="mt-1">
+                          <span className="text-lg font-black text-slate-800">
+                            {formatNumber(searchResult.past_results.resCmpData[0].re_total_inc)}
+                          </span>
+                          <span className="block text-[10px] text-slate-400 mt-0.5">
+                            Period: {searchResult.past_results.resCmpData[0].re_from_dt} to {searchResult.past_results.resCmpData[0].re_to_dt}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Net Profit */}
+                      <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Net Profit</span>
+                        <div className="mt-1">
+                          <span className={`text-lg font-black ${parseFloat(searchResult.past_results.resCmpData[0].re_net_profit) >= 0 ? 'text-slate-800' : 'text-rose-600'}`}>
+                            {formatNumber(searchResult.past_results.resCmpData[0].re_net_profit)}
+                          </span>
+                          <span className="block text-[10px] text-slate-400 mt-0.5">
+                            Margin: {((parseFloat(searchResult.past_results.resCmpData[0].re_net_profit) / parseFloat(searchResult.past_results.resCmpData[0].re_total_inc)) * 100).toFixed(2)}%
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Basic EPS */}
+                      <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Basic EPS</span>
+                        <div className="mt-1">
+                          <span className="text-lg font-black text-slate-800">
+                            ₹ {searchResult.past_results.resCmpData[0].re_basic_eps_for_cont_dic_opr || '—'}
+                          </span>
+                          <span className="block text-[10px] text-slate-400 mt-0.5">
+                            Face Value: ₹ {searchResult.past_results.resCmpData[0].re_face_val || '—'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Tax Expense */}
+                      <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tax Provision</span>
+                        <div className="mt-1">
+                          <span className="text-lg font-black text-slate-800">
+                            {formatNumber(searchResult.past_results.resCmpData[0].re_tax)}
+                          </span>
+                          <span className="block text-[10px] text-slate-400 mt-0.5">
+                            Filing Date: {searchResult.past_results.resCmpData[0].re_create_dt}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Financial Results Trend Table */}
+                  <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
+                    <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                      <div>
+                        <h3 className="text-sm font-black text-slate-800">Quarterly Results History</h3>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Historical trend extracted from Results API filings</p>
+                      </div>
+                      <span className="px-2.5 py-0.5 bg-slate-200/60 rounded-full text-[10px] font-bold text-slate-500">
+                        {searchResult.past_results?.resCmpData?.length || 0} Periods
+                      </span>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-100 bg-slate-50 text-slate-500 font-bold">
+                            <th className="text-left px-5 py-3 text-[10px] uppercase tracking-wider">From Date</th>
+                            <th className="text-left px-5 py-3 text-[10px] uppercase tracking-wider">To Date</th>
+                            <th className="text-right px-5 py-3 text-[10px] uppercase tracking-wider">Total Income</th>
+                            <th className="text-right px-5 py-3 text-[10px] uppercase tracking-wider">Net Profit</th>
+                            <th className="text-right px-5 py-3 text-[10px] uppercase tracking-wider">Basic EPS</th>
+                            <th className="text-center px-5 py-3 text-[10px] uppercase tracking-wider">Audit Status</th>
+                            <th className="text-center px-5 py-3 text-[10px] uppercase tracking-wider">Filing Date</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {searchResult.past_results?.resCmpData?.map((item, idx) => (
+                            <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors">
+                              <td className="px-5 py-3 text-xs font-semibold text-slate-600">{item.re_from_dt}</td>
+                              <td className="px-5 py-3 text-xs font-semibold text-slate-600">{item.re_to_dt}</td>
+                              <td className="px-5 py-3 text-right font-bold text-slate-800">
+                                {formatNumber(item.re_total_inc)}
+                              </td>
+                              <td className={`px-5 py-3 text-right font-bold ${parseFloat(item.re_net_profit) >= 0 ? 'text-slate-800' : 'text-rose-600'}`}>
+                                {formatNumber(item.re_net_profit)}
+                              </td>
+                              <td className="px-5 py-3 text-right font-extrabold text-slate-700">
+                                {item.re_basic_eps_for_cont_dic_opr ? `₹ ${parseFloat(item.re_basic_eps_for_cont_dic_opr).toFixed(2)}` : '—'}
+                              </td>
+                              <td className="px-5 py-3 text-center">
+                                <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-bold ${item.re_res_type === 'A' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-amber-50 text-amber-700 border border-amber-100'}`}>
+                                  {item.re_res_type === 'A' ? 'Audited' : 'Un-audited'}
+                                </span>
+                              </td>
+                              <td className="px-5 py-3 text-center text-xs font-semibold text-slate-400">{item.re_create_dt}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Expense Breakdown of Latest Period */}
+                  {searchResult.past_results?.resCmpData?.length > 0 && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Expense Breakdown */}
+                      <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+                        <h3 className="text-sm font-black text-slate-800 mb-3">Operating Expense Structure</h3>
+                        <div className="space-y-3.5">
+                          {/* Raw Materials */}
+                          <div>
+                            <div className="flex justify-between text-xs font-semibold text-slate-500 mb-1">
+                              <span>Raw Materials Consumption</span>
+                              <span className="text-slate-800 font-bold">
+                                {formatNumber(searchResult.past_results.resCmpData[0].re_rawmat_consump)}
+                              </span>
+                            </div>
+                            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                              <div 
+                                className="bg-slate-700 h-full rounded-full" 
+                                style={{ 
+                                  width: `${Math.min(100, (parseFloat(searchResult.past_results.resCmpData[0].re_rawmat_consump) / parseFloat(searchResult.past_results.resCmpData[0].re_total_inc)) * 100 || 0)}%` 
+                                }}
+                              ></div>
+                            </div>
+                          </div>
+
+                          {/* Employee Benefits */}
+                          <div>
+                            <div className="flex justify-between text-xs font-semibold text-slate-500 mb-1">
+                              <span>Employee Benefit Cost</span>
+                              <span className="text-slate-800 font-bold">
+                                {formatNumber(searchResult.past_results.resCmpData[0].re_staff_cost)}
+                              </span>
+                            </div>
+                            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                              <div 
+                                className="bg-slate-700 h-full rounded-full" 
+                                style={{ 
+                                  width: `${Math.min(100, (parseFloat(searchResult.past_results.resCmpData[0].re_staff_cost) / parseFloat(searchResult.past_results.resCmpData[0].re_total_inc)) * 100 || 0)}%` 
+                                }}
+                              ></div>
+                            </div>
+                          </div>
+
+                          {/* Finance Costs / Interest */}
+                          <div>
+                            <div className="flex justify-between text-xs font-semibold text-slate-500 mb-1">
+                              <span>Finance Costs (Interest)</span>
+                              <span className="text-slate-800 font-bold">
+                                {formatNumber(searchResult.past_results.resCmpData[0].re_int_new)}
+                              </span>
+                            </div>
+                            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                              <div 
+                                className="bg-slate-700 h-full rounded-full" 
+                                style={{ 
+                                  width: `${Math.min(100, (parseFloat(searchResult.past_results.resCmpData[0].re_int_new) / parseFloat(searchResult.past_results.resCmpData[0].re_total_inc)) * 100 || 0)}%` 
+                                }}
+                              ></div>
+                            </div>
+                          </div>
+
+                          {/* Depreciation */}
+                          <div>
+                            <div className="flex justify-between text-xs font-semibold text-slate-500 mb-1">
+                              <span>Depreciation & Amortisation</span>
+                              <span className="text-slate-800 font-bold">
+                                {formatNumber(searchResult.past_results.resCmpData[0].re_depr_und_exp)}
+                              </span>
+                            </div>
+                            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                              <div 
+                                className="bg-slate-700 h-full rounded-full" 
+                                style={{ 
+                                  width: `${Math.min(100, (parseFloat(searchResult.past_results.resCmpData[0].re_depr_und_exp) / parseFloat(searchResult.past_results.resCmpData[0].re_total_inc)) * 100 || 0)}%` 
+                                }}
+                              ></div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Notes / Ratios */}
+                      <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                        <div>
+                          <h3 className="text-sm font-black text-slate-800 mb-3">Solvency & Debt Ratios</h3>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl">
+                              <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Debt Equity Ratio</span>
+                              <span className="text-base font-black text-slate-800 mt-0.5 block">
+                                {searchResult.past_results.resCmpData[0].re_debt_eqt_rat || '—'}
+                              </span>
+                            </div>
+
+                            <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl">
+                              <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Interest Coverage</span>
+                              <span className="text-base font-black text-slate-800 mt-0.5 block">
+                                {searchResult.past_results.resCmpData[0].re_int_ser_cov || '—'}
+                              </span>
+                            </div>
+
+                            <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl">
+                              <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Debt Service Coverage</span>
+                              <span className="text-base font-black text-slate-800 mt-0.5 block">
+                                {searchResult.past_results.resCmpData[0].re_debt_ser_cov || '—'}
+                              </span>
+                            </div>
+
+                            <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl">
+                              <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Book Face Value</span>
+                              <span className="text-base font-black text-slate-800 mt-0.5 block">
+                                ₹ {searchResult.past_results.resCmpData[0].re_face_val || '—'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 pt-3 border-t border-slate-100 text-[11px] text-slate-400 leading-relaxed font-semibold">
+                          ℹ️ All figures formatted to Indian Rupees (Lakhs / Crores) as per NSE India filings database.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Latest Filings by Period */}
+                  <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
+                    <div className="px-5 py-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-slate-50/50">
+                      <div>
+                        <h3 className="text-sm font-black text-slate-800">Latest Live Corporate Filings</h3>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Real-time filings fetched directly from NSE India</p>
+                      </div>
+                      
+                      <div className="flex bg-slate-100/80 p-0.5 rounded-lg border border-slate-200/40">
+                        {['quarterly', 'half_yearly', 'annual'].map((tab) => (
+                          <button
+                            key={tab}
+                            type="button"
+                            onClick={() => setActiveFilingTab(tab)}
+                            className={`px-3 py-1 text-[10px] font-black rounded-md transition-all cursor-pointer capitalize ${activeFilingTab === tab ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                          >
+                            {tab === 'half_yearly' ? 'Half-Yearly' : tab}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-100 bg-slate-50 text-slate-500 font-bold">
+                            <th className="text-left px-5 py-3 text-[10px] uppercase tracking-wider font-extrabold">Filing Period</th>
+                            <th className="text-center px-5 py-3 text-[10px] uppercase tracking-wider font-extrabold">Audit Status</th>
+                            <th className="text-center px-5 py-3 text-[10px] uppercase tracking-wider font-extrabold">Relating To</th>
+                            <th className="text-center px-5 py-3 text-[10px] uppercase tracking-wider font-extrabold">Broadcast Date</th>
+                            <th className="text-center px-5 py-3 text-[10px] uppercase tracking-wider font-extrabold">Filing Document</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {searchResult.filings && searchResult.filings[activeFilingTab] && searchResult.filings[activeFilingTab].length > 0 ? (
+                            searchResult.filings[activeFilingTab].map((item, idx) => (
+                              <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors">
+                                <td className="px-5 py-3 text-xs font-semibold text-slate-600">
+                                  {item.financialYear || '—'}
+                                </td>
+                                <td className="px-5 py-3 text-center">
+                                  <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-bold ${item.audited === 'Audited' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-amber-50 text-amber-700 border border-amber-100'}`}>
+                                    {item.audited || 'Unaudited'}
+                                  </span>
+                                </td>
+                                <td className="px-5 py-3 text-center text-xs font-semibold text-slate-600">
+                                  {item.relatingTo || '—'}
+                                </td>
+                                <td className="px-5 py-3 text-center text-xs font-semibold text-slate-400">
+                                  {item.broadCastDate || '—'}
+                                </td>
+                                <td className="px-5 py-3 text-center">
+                                  {item.xbrl && item.xbrl !== '-' ? (
+                                    <a
+                                      href={item.xbrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-xs font-black text-slate-800 hover:text-slate-600 transition-colors"
+                                    >
+                                      XBRL Filing ↗
+                                    </a>
+                                  ) : (
+                                    <span className="text-slate-300">—</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan="5" className="text-center py-8 text-xs text-slate-400 font-semibold">
+                                No recent {activeFilingTab === 'half_yearly' ? 'half-yearly' : activeFilingTab} filings found on NSE for this stock.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                </div>
+              )}
+
+          {/* Stock List View */}
+          {activeView === 'stocks' && (
+            <div>
+              {/* Page Header */}
+              <div className="mb-5">
+                <h1 className="text-lg font-black text-slate-800">Stock List</h1>
+                <p className="text-xs text-slate-400 mt-0.5">All Nifty 50 stocks in the database</p>
+              </div>
+
+              {loadingStocks ? (
+                <div className="flex items-center justify-center py-20">
+                  <div className="flex gap-1.5">
+                    <span className="w-2.5 h-2.5 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                    <span className="w-2.5 h-2.5 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                    <span className="w-2.5 h-2.5 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100 bg-slate-50">
+                        <th className="text-left px-5 py-3.5 text-[11px] font-black text-slate-500 uppercase tracking-wider w-12">#</th>
+                        <th className="text-left px-5 py-3.5 text-[11px] font-black text-slate-500 uppercase tracking-wider">Name</th>
+                        <th className="text-left px-5 py-3.5 text-[11px] font-black text-slate-500 uppercase tracking-wider">Symbol</th>
+                        <th className="text-left px-5 py-3.5 text-[11px] font-black text-slate-500 uppercase tracking-wider">Status</th>
+                        <th className="text-left px-5 py-3.5 text-[11px] font-black text-slate-500 uppercase tracking-wider">Created At</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stocks.map((stock, idx) => (
+                        <tr
+                          key={stock.id}
+                          className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors"
+                        >
+                          <td className="px-5 py-3.5 text-slate-400 font-semibold text-xs">{stock.id}</td>
+                          <td className="px-5 py-3.5 font-semibold text-slate-800">{stock.name}</td>
+                          <td className="px-5 py-3.5">
+                            <span className="inline-block px-2.5 py-0.5 bg-slate-100 text-slate-700 rounded-lg text-xs font-black tracking-wide">
+                              {stock.symbol}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className={`inline-flex items-center gap-1.5 text-xs font-bold`}>
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                              <span className="text-slate-600 capitalize">{stock.status}</span>
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5 text-slate-400 text-xs font-medium">{formatDate(stock.created_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  {/* Footer count */}
+                  <div className="px-5 py-3 border-t border-slate-100 bg-slate-50">
+                    <span className="text-xs font-bold text-slate-400">{stocks.length} stocks total</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* Profile Modal */}
+      {isProfileOpen && (
+        <div
+          onClick={() => setIsProfileOpen(false)}
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white w-full max-w-[360px] rounded-3xl p-6 shadow-xl border border-slate-100 relative"
+          >
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-4 select-none">
+              <h3 className="text-base font-black text-slate-800">Profile Details</h3>
+              <button
+                onClick={() => setIsProfileOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-800 border border-slate-200/60 flex items-center justify-center font-bold text-lg shadow-sm">
+                  {profile?.username?.substring(0, 2).toUpperCase() || 'US'}
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Username</span>
+                  <span className="text-sm font-extrabold text-slate-800">@{profile?.username || 'user'}</span>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="block text-[10px] font-bold text-slate-400 uppercase">Full Name</span>
+                <div className="block w-full px-4 py-3 bg-slate-50 border border-slate-150 rounded-xl text-slate-800 font-semibold text-sm">
+                  {profile?.full_name || 'N/A'}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 pt-4 border-t border-slate-100">
+                <button
+                  onClick={() => { setIsProfileOpen(false); onNavigateReset(); }}
+                  className="w-full py-3 bg-slate-100 hover:bg-slate-200/80 text-slate-800 font-bold rounded-xl transition-all cursor-pointer text-sm"
+                >
+                  Change Password
+                </button>
+                <button
+                  onClick={() => { setIsProfileOpen(false); onLogout(); }}
+                  className="w-full py-3 bg-slate-100 hover:bg-slate-200/85 text-slate-800 font-bold rounded-xl transition-all cursor-pointer text-sm"
+                >
+                  Log Out
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
