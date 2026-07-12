@@ -3,9 +3,168 @@ import axios from 'axios';
 
 const API_BASE_URL = 'http://localhost:8080';
 
+const getDownloadProxyUrl = (originalUrl) => {
+  if (!originalUrl) return "";
+  
+  // Extract and decode the filename
+  let filename = "";
+  try {
+    filename = decodeURIComponent(originalUrl.split('?')[0].split('/').pop());
+  } catch (e) {
+    filename = originalUrl.split('?')[0].split('/').pop();
+  }
+  
+  if (!filename) {
+    filename = "presentation.pdf";
+  }
+  
+  // Sanitize: replace spaces with underscores, and keep only safe chars
+  const cleanFilename = filename
+    .replace(/\s+/g, '_')
+    .replace(/[^a-zA-Z0-9._-]/g, '');
+    
+  return `${API_BASE_URL}/api/download-file/${encodeURIComponent(cleanFilename)}?url=${encodeURIComponent(originalUrl)}`;
+};
+
+const renderMarkdown = (md) => {
+  if (!md) return null;
+
+  const lines = md.split('\n');
+  const elements = [];
+  let currentList = [];
+  let tableRows = [];
+  let inTable = false;
+
+  const flushList = (key) => {
+    if (currentList.length > 0) {
+      elements.push(
+        <ul key={`list-${key}`} className="list-disc pl-5 space-y-2 mb-4">
+          {currentList}
+        </ul>
+      );
+      currentList = [];
+    }
+  };
+
+  const flushTable = (key) => {
+    if (tableRows.length > 0) {
+      const headers = tableRows[0];
+      const body = tableRows.slice(1).filter(row => {
+        const firstCell = row[0]?.trim() || '';
+        return firstCell.replace(/[:-]/g, '') !== '';
+      });
+
+      elements.push(
+        <div key={`table-${key}`} className="overflow-x-auto my-4 rounded-xl border border-slate-200 shadow-sm bg-white">
+          <table className="w-full text-xs text-left border-collapse">
+            <thead className="bg-slate-900 text-white uppercase font-bold text-[10px] tracking-wider">
+              <tr>
+                {headers.map((h, i) => (
+                  <th key={i} className="px-4 py-3 text-left border-b border-slate-250 font-bold uppercase">{h.trim()}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-150 font-semibold text-slate-700">
+              {body.map((row, rIdx) => (
+                <tr key={rIdx} className={rIdx % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-slate-50 hover:bg-slate-100'}>
+                  {row.map((cell, cIdx) => {
+                    return (
+                      <td key={cIdx} className={`px-4 py-3 border-b border-slate-100 ${cIdx === 0 ? 'font-bold text-slate-800' : ''}`}>
+                        {parseInlineStyles(cell.trim())}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      tableRows = [];
+      inTable = false;
+    }
+  };
+
+  const parseInlineStyles = (text) => {
+    if (!text) return '';
+    const parts = text.split('**');
+    return parts.map((part, idx) => {
+      if (idx % 2 === 1) {
+        return <strong key={idx} className="text-slate-900 font-black">{part}</strong>;
+      }
+      if (part.startsWith('*') && part.endsWith('*')) {
+        return <em key={idx} className="text-indigo-650 italic font-semibold">{part.slice(1, -1)}</em>;
+      }
+      return part;
+    });
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (line.trim().startsWith('|')) {
+      inTable = true;
+      const cells = line.split('|').slice(1, -1);
+      tableRows.push(cells);
+      continue;
+    } else if (inTable) {
+      flushTable(i);
+    }
+
+    if (line.trim().startsWith('* ') || line.trim().startsWith('- ')) {
+      const content = line.trim().substring(2);
+      currentList.push(
+        <li key={currentList.length} className="text-xs text-slate-700 leading-relaxed">
+          {parseInlineStyles(content)}
+        </li>
+      );
+      continue;
+    } else {
+      flushList(i);
+    }
+
+    if (line.startsWith('# ')) {
+      elements.push(
+        <h1 key={i} className="text-lg font-black text-slate-900 border-b border-slate-200 pb-2 mb-4 mt-6">
+          {line.substring(2)}
+        </h1>
+      );
+    } else if (line.startsWith('## ')) {
+      elements.push(
+        <h2 key={i} className="text-sm font-extrabold text-slate-800 border-l-4 border-indigo-500 pl-3.5 py-0.5 mb-3 mt-5">
+          {line.substring(3)}
+        </h2>
+      );
+    } else if (line.startsWith('### ')) {
+      elements.push(
+        <h3 key={i} className="text-xs font-bold text-slate-800 mb-2 mt-4">
+          {line.substring(4)}
+        </h3>
+      );
+    } else if (line.startsWith('---')) {
+      elements.push(<hr key={i} className="my-6 border-t border-slate-200" />);
+    } else if (line.trim() === '') {
+      continue;
+    } else {
+      elements.push(
+        <p key={i} className="text-xs text-slate-600 leading-relaxed mb-3">
+          {parseInlineStyles(line)}
+        </p>
+      );
+    }
+  }
+
+  flushList(lines.length);
+  flushTable(lines.length);
+
+  return <div className="markdown-report space-y-4">{elements}</div>;
+};
+
+
 export default function MarketDashboard({ onNavigate, profile, onLogout, onNavigateReset }) {
+
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [activeView, setActiveView] = useState('pdf'); // 'pdf' | 'stocks'
+  const [activeView, setActiveView] = useState('stocks'); // 'stocks'
   const [stocks, setStocks] = useState([]);
   const [loadingStocks, setLoadingStocks] = useState(false);
 
@@ -14,6 +173,53 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
   const [searchResult, setSearchResult] = useState(null);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState(null);
+  const [selectedPdfSummary, setSelectedPdfSummary] = useState(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState(null);
+  const [uploadModalTarget, setUploadModalTarget] = useState(null); // { concall, pptUrl }
+  const [dragActive, setDragActive] = useState(false);
+
+  const handleFileUpload = async (file) => {
+    if (!file) return;
+    setSummaryLoading(true);
+    setSummaryError(null);
+    setSelectedPdfSummary({ loading: true });
+    setUploadModalTarget(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await axios.post(`${API_BASE_URL}/api/summarize-uploaded-pdf`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setSelectedPdfSummary(res.data.data);
+    } catch (err) {
+      const errMsg = err.response?.data?.detail || 'Could not extract text. The PDF may be image-based or scanned.';
+      setSelectedPdfSummary({ loading: false, error: true, title: 'Summary Unavailable', sections: [], key_numbers: [], errorMessage: errMsg });
+      setSummaryError(errMsg);
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
+  const handleDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      await handleFileUpload(file);
+    }
+  };
 
 
   const handleSearch = async (e) => {
@@ -28,7 +234,8 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
 
     try {
       if (isUrl) {
-        const response = await axios.get(`${API_BASE_URL}/api/parse-xbrl?url=${encodeURIComponent(queryStr)}`);
+        const activeSymbol = searchResult?.symbol || '';
+        const response = await axios.get(`${API_BASE_URL}/api/parse-xbrl?url=${encodeURIComponent(queryStr)}&symbol=${encodeURIComponent(activeSymbol)}`);
         const data = response.data.data;
         
         // Convert raw Rupees from XBRL into Lakhs for standard rendering
@@ -148,22 +355,39 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
     }
   };
 
+  const handleStockSelect = async (symbol) => {
+    setSearchQuery(symbol);
+    setSearchLoading(true);
+    setSearchError(null);
+    setActiveView('pdf');
+    try {
+      const response = await axios.get(`${API_BASE_URL}/nse/search/${symbol.toUpperCase()}`);
+      setSearchResult(response.data.data);
+    } catch (err) {
+      console.error(err);
+      setSearchError(err.response?.data?.detail || 'Failed to fetch stock details.');
+      setSearchResult(null);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
   const navItems = [
-    {
-      id: 'pdf',
-      label: 'PDF Analyser',
-      icon: (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-      ),
-    },
     {
       id: 'stocks',
       label: 'Stock List',
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v18h18M7 16l4-4 4 4 6-6" />
+        </svg>
+      ),
+    },
+    {
+      id: 'pdf',
+      label: 'PDF Analyser',
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
       ),
     },
@@ -325,8 +549,6 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                       </div>
                     </div>
                   )}
-                </div>
-              )}
 
               {/* Results Dashboard */}
               {searchResult && !searchLoading && (
@@ -402,69 +624,9 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                           </span>
                         </div>
                       </div>
-                    ) : (
-                      <div className="px-3.5 py-1.5 bg-amber-50 border border-amber-100 rounded-lg text-amber-700 text-xs font-semibold">
-                        ⚠️ Live price unavailable. Showing financial results only.
-                      </div>
-                    )}
+                    ) : null}
                   </div>
 
-                  {/* Latest Quarter Financial Cards */}
-                  {searchResult.past_results?.resCmpData?.length > 0 && (
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                      {/* Total Income */}
-                      <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Income</span>
-                        <div className="mt-1">
-                          <span className="text-lg font-black text-slate-800">
-                            {formatNumber(searchResult.past_results.resCmpData[0].re_total_inc)}
-                          </span>
-                          <span className="block text-[10px] text-slate-400 mt-0.5">
-                            Period: {searchResult.past_results.resCmpData[0].re_from_dt} to {searchResult.past_results.resCmpData[0].re_to_dt}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Net Profit */}
-                      <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Net Profit</span>
-                        <div className="mt-1">
-                          <span className={`text-lg font-black ${parseFloat(searchResult.past_results.resCmpData[0].re_net_profit) >= 0 ? 'text-slate-800' : 'text-rose-600'}`}>
-                            {formatNumber(searchResult.past_results.resCmpData[0].re_net_profit)}
-                          </span>
-                          <span className="block text-[10px] text-slate-400 mt-0.5">
-                            Margin: {((parseFloat(searchResult.past_results.resCmpData[0].re_net_profit) / parseFloat(searchResult.past_results.resCmpData[0].re_total_inc)) * 100).toFixed(2)}%
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Basic EPS */}
-                      <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Basic EPS</span>
-                        <div className="mt-1">
-                          <span className="text-lg font-black text-slate-800">
-                            ₹ {searchResult.past_results.resCmpData[0].re_basic_eps_for_cont_dic_opr || '—'}
-                          </span>
-                          <span className="block text-[10px] text-slate-400 mt-0.5">
-                            Face Value: ₹ {searchResult.past_results.resCmpData[0].re_face_val || '—'}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Tax Expense */}
-                      <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tax Provision</span>
-                        <div className="mt-1">
-                          <span className="text-lg font-black text-slate-800">
-                            {formatNumber(searchResult.past_results.resCmpData[0].re_tax)}
-                          </span>
-                          <span className="block text-[10px] text-slate-400 mt-0.5">
-                            Filing Date: {searchResult.past_results.resCmpData[0].re_create_dt}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
 
 
 
@@ -474,7 +636,18 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                       <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
                         <div>
                           <h3 className="text-sm font-black text-slate-800">Earnings Concalls & Presentations</h3>
-                          <p className="text-[11px] text-slate-400 mt-0.5">Scraped real-time from Screener.in</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            Scraped real-time from Screener.in (Source:{" "}
+                            <a
+                              href={`https://www.screener.in/company/${searchResult.symbol}/consolidated/`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-indigo-600 hover:underline font-bold"
+                            >
+                              screener.in/company/{searchResult.symbol}/
+                            </a>
+                            )
+                          </p>
                         </div>
                         <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px] font-bold">
                           {searchResult.concalls.length} Periods Available
@@ -486,7 +659,6 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                           <thead>
                             <tr className="border-b border-slate-100 bg-slate-50 text-slate-500 font-bold">
                               <th className="text-left px-5 py-3 text-[10px] uppercase tracking-wider font-extrabold">Concall Period</th>
-                              <th className="text-center px-5 py-3 text-[10px] uppercase tracking-wider font-extrabold">Transcript</th>
                               <th className="text-center px-5 py-3 text-[10px] uppercase tracking-wider font-extrabold">AI Summary</th>
                               <th className="text-center px-5 py-3 text-[10px] uppercase tracking-wider font-extrabold">Presentation (PPT)</th>
                               <th className="text-center px-5 py-3 text-[10px] uppercase tracking-wider font-extrabold">Audio Recording</th>
@@ -498,48 +670,51 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                                 <td className="px-5 py-3 text-xs font-bold text-slate-700">{concall.date}</td>
                                 
                                 <td className="px-5 py-3 text-center">
-                                  {concall.transcript ? (
-                                    <a
-                                      href={concall.transcript}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold transition-all"
-                                    >
-                                      Transcript 📄
-                                    </a>
-                                  ) : (
-                                    <span className="text-slate-300 text-xs">—</span>
-                                  )}
-                                </td>
-
-                                <td className="px-5 py-3 text-center">
-                                  {concall.summary ? (
-                                    <a
-                                      href={concall.summary}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-100 rounded-lg text-xs font-semibold transition-all"
+                                  {concall.summary || concall.ppt ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSummaryError(null);
+                                        setSelectedPdfSummary(null);
+                                        setUploadModalTarget({ concall, pptUrl: concall.ppt });
+                                      }}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-100 rounded-lg text-xs font-semibold transition-all cursor-pointer"
                                     >
                                       AI Summary 💡
-                                    </a>
+                                    </button>
                                   ) : (
                                     <span className="text-slate-300 text-xs">—</span>
                                   )}
                                 </td>
 
                                 <td className="px-5 py-3 text-center">
-                                  {concall.ppt ? (
-                                    <a
-                                      href={concall.ppt}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-100 rounded-lg text-xs font-black transition-all"
-                                    >
-                                      Download PPT 📥
-                                    </a>
-                                  ) : (
-                                    <span className="text-slate-300 text-xs font-semibold">Not Available</span>
-                                  )}
+                                  <div className="flex items-center justify-center gap-2">
+                                    {concall.ppt ? (
+                                      <>
+                                        <a
+                                          href={getDownloadProxyUrl(concall.ppt)}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-100 rounded-lg text-xs font-black transition-all"
+                                        >
+                                          Download PPT 📥
+                                        </a>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setSummaryError(null);
+                                            setSelectedPdfSummary(null);
+                                            setUploadModalTarget({ concall, pptUrl: concall.ppt });
+                                          }}
+                                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-100 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                                        >
+                                          💡 AI Summary
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <span className="text-slate-300 text-xs font-semibold">Not Available</span>
+                                    )}
+                                  </div>
                                 </td>
 
                                 <td className="px-5 py-3 text-center">
@@ -566,6 +741,8 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
 
                 </div>
               )}
+            </div>
+          )}
 
           {/* Stock List View */}
           {activeView === 'stocks' && (
@@ -600,7 +777,8 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                       {stocks.map((stock, idx) => (
                         <tr
                           key={stock.id}
-                          className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors"
+                          onClick={() => handleStockSelect(stock.symbol)}
+                          className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors cursor-pointer"
                         >
                           <td className="px-5 py-3.5 text-slate-400 font-semibold text-xs">{stock.id}</td>
                           <td className="px-5 py-3.5 font-semibold text-slate-800">{stock.name}</td>
@@ -686,6 +864,217 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                   Log Out
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* PDF Upload Modal — opens when user clicks AI Summary */}
+      {uploadModalTarget && !selectedPdfSummary && (
+        <div
+          onClick={() => { setUploadModalTarget(null); setSummaryError(null); setSummaryLoading(false); }}
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white w-full max-w-lg rounded-3xl p-6 shadow-2xl border border-slate-100 relative"
+          >
+            {/* Header */}
+            <div className="flex justify-between items-start mb-5">
+              <div>
+                <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
+                  <span className="text-xl">📄</span> Upload Presentation PDF
+                </h3>
+                <p className="text-[11px] text-slate-400 font-semibold mt-1">
+                  Download the PPT first, then upload it here for AI analysis · {uploadModalTarget.concall.date}
+                </p>
+              </div>
+              <button
+                onClick={() => { setUploadModalTarget(null); setSummaryError(null); setSummaryLoading(false); }}
+                className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Step 1 hint */}
+            <div className="mb-4 p-3 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center gap-3">
+              <span className="text-lg">1️⃣</span>
+              <div className="flex-1">
+                <p className="text-xs font-bold text-emerald-800">First — Download the PPT</p>
+                <p className="text-[11px] text-emerald-600 mt-0.5">Click below to download the presentation to your device</p>
+              </div>
+              <a
+                href={getDownloadProxyUrl(uploadModalTarget.pptUrl)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all flex-shrink-0"
+              >
+                Download PPT 📥
+              </a>
+            </div>
+
+            {/* Step 2: Upload */}
+            <div className="mb-4 p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex items-start gap-3">
+              <span className="text-lg mt-0.5">2️⃣</span>
+              <div className="flex-1">
+                <p className="text-xs font-bold text-indigo-800 mb-2">Then — Upload it for AI Analysis</p>
+                <label
+                  htmlFor="pdf-upload-input"
+                  onDragEnter={handleDrag}
+                  onDragOver={handleDrag}
+                  onDragLeave={handleDrag}
+                  onDrop={handleDrop}
+                  className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl py-6 px-4 cursor-pointer transition-all ${
+                    dragActive
+                      ? "border-indigo-500 bg-indigo-50"
+                      : "border-indigo-200 bg-white hover:border-indigo-400 hover:bg-indigo-50/50"
+                  }`}
+                >
+                  <span className="text-3xl">☁️</span>
+                  <span className="text-xs font-bold text-indigo-700">
+                    {dragActive ? "Drop the file here!" : "Click to browse or drag & drop"}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-semibold">Accepts PDF or PPTX files (including extensionless files)</span>
+                  <input
+                    id="pdf-upload-input"
+                    type="file"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file) await handleFileUpload(file);
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+
+            {summaryError && (
+              <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-rose-700 text-xs font-semibold">
+                ⚠️ {summaryError}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* AI PDF Summary Modal */}
+      {selectedPdfSummary && (
+        <div
+          onClick={() => { setSelectedPdfSummary(null); setSummaryError(null); }}
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white w-full max-w-3xl rounded-3xl p-6 shadow-xl border border-slate-100 relative max-h-[90vh] flex flex-col"
+          >
+            {/* Modal Header */}
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-4 select-none">
+              <div>
+                <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
+                  <span className="text-xl">💡</span>
+                  {selectedPdfSummary.loading ? 'Analysing Document...' : (selectedPdfSummary.title || 'Presentation AI Summary')}
+                </h3>
+                <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
+                  {selectedPdfSummary.loading
+                    ? 'Extracting text & running investment-grade analysis...'
+                    : selectedPdfSummary.error
+                      ? 'Could not extract content from this document.'
+                      : selectedPdfSummary.source === 'nse_financial_data'
+                        ? `AI Summary · Sourced from NSE Financial Data · ${selectedPdfSummary.pages_or_slides || '?'} sections`
+                        : selectedPdfSummary.source === 'uploaded_file'
+                          ? `${selectedPdfSummary.filename || 'Uploaded File'} · ${selectedPdfSummary.file_type || 'PDF'} · ${selectedPdfSummary.pages_or_slides || '?'} pages · ${selectedPdfSummary.total_lines_extracted || '?'} data points extracted`
+                          : `AI-Extracted Key Insights · ${selectedPdfSummary.file_type || 'PDF'} · ${selectedPdfSummary.pages_or_slides || '?'} pages/slides`
+                  }
+                </p>
+              </div>
+              <button
+                onClick={() => { setSelectedPdfSummary(null); setSummaryError(null); }}
+                className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto space-y-5 pr-1">
+
+              {/* Loading state */}
+              {selectedPdfSummary.loading && (
+                <div className="flex flex-col items-center justify-center py-16 gap-4">
+                  <div className="flex gap-1.5">
+                    <span className="w-2.5 h-2.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                    <span className="w-2.5 h-2.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                    <span className="w-2.5 h-2.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                  </div>
+                  <p className="text-xs font-semibold text-slate-400">Extracting text from the presentation PDF / PPTX...</p>
+                </div>
+              )}
+
+              {/* Real summary content */}
+              {!selectedPdfSummary.loading && (
+                <>
+                  {selectedPdfSummary.markdown_report ? (
+                    renderMarkdown(selectedPdfSummary.markdown_report)
+                  ) : (
+                    <>
+                      {/* Key Numbers Bar */}
+                      {selectedPdfSummary.key_numbers && selectedPdfSummary.key_numbers.length > 0 && (
+                        <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl">
+                          <span className="block text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-2">Key Figures Found in Document</span>
+                          <div className="flex flex-wrap gap-2">
+                            {selectedPdfSummary.key_numbers.map((num, i) => (
+                              <span key={i} className="px-2 py-0.5 bg-white border border-indigo-100 rounded-lg text-xs font-black text-indigo-700 shadow-sm">{num}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Sections */}
+                      {selectedPdfSummary.sections && selectedPdfSummary.sections.map((section, sIdx) => (
+                        <div key={sIdx} className="space-y-2">
+                          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">{section.title}</h4>
+                          <ul className="space-y-2">
+                            {section.points.map((point, pIdx) => (
+                              <li key={pIdx} className="flex gap-2.5 items-start">
+                                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 flex-shrink-0" />
+                                <span className="text-xs font-semibold text-slate-700 leading-relaxed">{point}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </>
+              )}
+
+              {/* Error state */}
+              {selectedPdfSummary.error && !selectedPdfSummary.loading && (
+                <div className="flex flex-col items-center justify-center py-12 gap-4">
+                  <div className="w-14 h-14 rounded-full bg-rose-50 border border-rose-100 flex items-center justify-center text-2xl">⚠️</div>
+                  <div className="text-center">
+                    <p className="text-sm font-bold text-slate-700 mb-1">Unable to Generate Summary</p>
+                    <p className="text-xs font-semibold text-slate-400 max-w-sm leading-relaxed">
+                      {selectedPdfSummary.errorMessage || 'The document could not be parsed. It may be image-based, password-protected, or temporarily inaccessible.'}
+                    </p>
+                  </div>
+                  <p className="text-[10px] text-slate-300 font-semibold">You can still download the PPT using the Download button.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-end pt-4 border-t border-slate-100 mt-4">
+              <button
+                onClick={() => { setSelectedPdfSummary(null); setSummaryError(null); }}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition-all cursor-pointer shadow-sm"
+              >
+                Close Summary
+              </button>
             </div>
           </div>
         </div>
