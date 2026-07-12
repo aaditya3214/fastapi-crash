@@ -352,6 +352,203 @@ const getAIResponse = (query) => {
 };
 
 /* ==========================================
+   GET STOCK ADVISOR DYNAMIC AI RESPONSE
+   ========================================== */
+const getDynamicAIResponse = async (query) => {
+  const q = query.toLowerCase();
+  
+  // 1. Check for specific static mock templates first
+  if (q.includes("infosys hits 5-year low") || (q.includes("infosys") && q.includes("5-year"))) {
+    return getAIResponse(query);
+  }
+  if (q.includes("bharat forge") || q.includes("navy deal")) {
+    return getAIResponse(query);
+  }
+  if ((q.includes("tcs") && q.includes("infosys") && q.includes("fall")) || q.includes("third day straight")) {
+    return getAIResponse(query);
+  }
+  if (q.includes("tcs down 32%") || (q.includes("tcs") && q.includes("32%")) || (q.includes("tcs") && q.includes("buy more or hold"))) {
+    return getAIResponse(query);
+  }
+  if (q.includes("mutual fund") || q.includes("tax saving") || q.includes("tax") || q.includes("elss")) {
+    return getAIResponse(query);
+  }
+
+  // 2. Detect if any stock is mentioned
+  const stockMap = {
+    'reliance': 'RELIANCE',
+    'tcs': 'TCS',
+    'tata consultancy': 'TCS',
+    'infosys': 'INFY',
+    'infy': 'INFY',
+    'wipro': 'WIPRO',
+    'hdfc': 'HDFCBANK',
+    'sbi': 'SBIN',
+    'state bank': 'SBIN',
+    'icici': 'ICICIBANK',
+    'axis': 'AXISBANK',
+    'bajaj': 'BAJFINANCE',
+    'lt': 'LT',
+    'larsen': 'LT',
+    'itc': 'ITC',
+    'maruti': 'MARUTI',
+    'tata motors': 'TATAMOTORS',
+    'tata steel': 'TATASTEEL',
+    'kotak': 'KOTAKBANK',
+    'airtel': 'BHARTIARTL',
+    'bharti': 'BHARTIARTL',
+    'hcl': 'HCLTECH',
+    'ntpc': 'NTPC',
+    'titan': 'TITAN',
+    'asian paints': 'ASIANPAINT',
+    'coal india': 'COALINDIA',
+    'sun pharma': 'SUNPHARMA',
+    'ongc': 'ONGC',
+    'trent': 'TRENT',
+    'apollo': 'APOLLOHOSP',
+    'adani': 'ADANIENT'
+  };
+
+  let matchedSymbol = null;
+  for (const [key, value] of Object.entries(stockMap)) {
+    if (q.includes(key)) {
+      matchedSymbol = value;
+      break;
+    }
+  }
+
+  // Also check if any word is a 3+ letter uppercase word
+  if (!matchedSymbol) {
+    const words = query.split(/\s+/);
+    for (const word of words) {
+      const cleanWord = word.replace(/[^a-zA-Z]/g, '');
+      if (cleanWord.length >= 3 && cleanWord === cleanWord.toUpperCase()) {
+        matchedSymbol = cleanWord;
+        break;
+      }
+    }
+  }
+
+  if (matchedSymbol) {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/nse/search/${matchedSymbol}`);
+      const data = response.data.data;
+      if (data && data.past_results && data.past_results.resCmpData && data.past_results.resCmpData.length > 0) {
+        const latest = data.past_results.resCmpData[0];
+        const companyName = data.company_name;
+        const symbol = data.symbol;
+        const price = data.quote?.priceInfo?.lastPrice;
+        const change = data.quote?.priceInfo?.change;
+        const pChange = data.quote?.priceInfo?.pChange;
+
+        const formatLakhsToCrores = (num, isCurrency = true) => {
+          if (num === null || num === undefined || num === '') return '—';
+          const val = parseFloat(num);
+          if (isNaN(val)) return num;
+          if (isCurrency) {
+            if (Math.abs(val) >= 100) {
+              return `₹ ${(val / 100).toFixed(2)} Cr`;
+            }
+            return `₹ ${val.toFixed(2)} Lakhs`;
+          }
+          return val.toLocaleString('en-IN');
+        };
+
+        const priceSection = price ? (
+          <span className="text-base font-extrabold text-gray-800">
+            ₹{price.toLocaleString('en-IN')}{' '}
+            <span className={`text-xs font-normal ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              ({change >= 0 ? '+' : ''}{change.toFixed(2)}%)
+            </span>
+          </span>
+        ) : (
+          <span className="text-xs font-bold text-amber-600 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded">
+            Live Price N/A
+          </span>
+        );
+
+        return (
+          <div className="space-y-4 text-gray-805">
+            <p className="leading-relaxed">
+              Here is the latest intelligence report for your query on <strong className="text-slate-900">{companyName} ({symbol})</strong>:
+            </p>
+
+            {/* Metric Cards Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 my-4">
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex flex-col justify-between">
+                <span className="text-[10px] text-gray-400 block uppercase font-bold">LTP</span>
+                {priceSection}
+              </div>
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex flex-col justify-between">
+                <span className="text-[10px] text-gray-400 block uppercase font-bold">Total Income</span>
+                <span className="text-sm font-extrabold text-gray-850">
+                  {formatLakhsToCrores(latest.re_total_inc)}
+                </span>
+              </div>
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex flex-col justify-between">
+                <span className="text-[10px] text-gray-400 block uppercase font-bold">Net Profit</span>
+                <span className={`text-sm font-extrabold ${parseFloat(latest.re_net_profit) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {formatLakhsToCrores(latest.re_net_profit)}
+                </span>
+              </div>
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex flex-col justify-between">
+                <span className="text-[10px] text-gray-400 block uppercase font-bold">Basic EPS</span>
+                <span className="text-sm font-extrabold text-gray-800 font-sans">
+                  ₹{parseFloat(latest.re_basic_eps_for_cont_dic_opr || 0).toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            {/* Results Trend Table */}
+            <div className="overflow-x-auto my-4 rounded-xl border border-slate-200">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-100 text-gray-700 uppercase font-black">
+                  <tr>
+                    <th className="px-4 py-2">Quarter Ended</th>
+                    <th className="px-4 py-2 text-right">Total Income</th>
+                    <th className="px-4 py-2 text-right">Net Profit</th>
+                    <th className="px-4 py-2 text-right">EPS</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 font-semibold text-slate-700">
+                  {data.past_results.resCmpData.slice(0, 3).map((row, idx) => (
+                    <tr key={idx}>
+                      <td className="px-4 py-2.5">{row.re_to_dt}</td>
+                      <td className="px-4 py-2.5 text-right">{formatLakhsToCrores(row.re_total_inc)}</td>
+                      <td className={`px-4 py-2.5 text-right ${parseFloat(row.re_net_profit) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {formatLakhsToCrores(row.re_net_profit)}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">₹{parseFloat(row.re_basic_eps_for_cont_dic_opr || 0).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Recommendation block */}
+            <div className="bg-emerald-50/70 border-l-4 border-emerald-500 p-4 rounded-r-xl">
+              <h4 className="font-black text-emerald-800 text-xs uppercase">AI Analyst Outlook</h4>
+              <p className="text-xs text-emerald-700 mt-1 font-semibold leading-relaxed">
+                <strong>{parseFloat(latest.re_net_profit) >= 0 ? 'BULLISH' : 'CAUTIOUS'} OUTLOOK</strong>. {companyName} continues to show stable operational trajectory. The latest net profit margins are at {latest.re_total_inc && parseFloat(latest.re_total_inc) > 0 ? ((parseFloat(latest.re_net_profit) / parseFloat(latest.re_total_inc)) * 100).toFixed(2) : '0.00'}%. Accumulate on dips to capture long-term structural compounding.
+              </p>
+            </div>
+            
+            <p className="text-[10px] text-gray-400 italic mt-6 select-none">
+              *Disclaimer: Stock market investments are subject to market risks. Please consult a SEBI registered investment advisor before investing.
+            </p>
+          </div>
+        );
+      }
+    } catch (err) {
+      console.error("Failed to fetch stock search data for chat:", err);
+    }
+  }
+
+  // Fallback to static generic response
+  return getAIResponse(query);
+};
+
+/* ==========================================
    DASHBOARD VIEW (LOGGED IN SCREEN)
    ========================================== */
 function DashboardView({ profile, onLogout, onNavigateReset, onNavigate }) {
@@ -506,9 +703,8 @@ function DashboardView({ profile, onLogout, onNavigateReset, onNavigate }) {
     setSelectedFile(null);
     setIsGenerating(true);
 
-    // Mock AI response delay
-    setTimeout(() => {
-      const responseMarkup = getAIResponse(userMessageText);
+    // Fetch the dynamic AI response
+    getDynamicAIResponse(userMessageText).then(responseMarkup => {
       const assistantMsg = {
         id: `msg-${Date.now() + 1}`,
         role: 'assistant',
@@ -526,7 +722,10 @@ function DashboardView({ profile, onLogout, onNavigateReset, onNavigate }) {
         return t;
       }));
       setIsGenerating(false);
-    }, 1200);
+    }).catch(err => {
+      console.error(err);
+      setIsGenerating(false);
+    });
   };
 
   useEffect(() => {

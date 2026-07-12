@@ -14,7 +14,7 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
   const [searchResult, setSearchResult] = useState(null);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState(null);
-  const [activeFilingTab, setActiveFilingTab] = useState('quarterly'); // 'quarterly' | 'half_yearly' | 'annual'
+
 
   const handleSearch = async (e) => {
     if (e) e.preventDefault();
@@ -22,12 +22,90 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
 
     setSearchLoading(true);
     setSearchError(null);
+    
+    const queryStr = searchQuery.trim();
+    const isUrl = queryStr.startsWith('http://') || queryStr.startsWith('https://') || queryStr.includes('.xml');
+
     try {
-      const response = await axios.get(`${API_BASE_URL}/nse/search/${searchQuery.trim().toUpperCase()}`);
-      setSearchResult(response.data.data);
+      if (isUrl) {
+        const response = await axios.get(`${API_BASE_URL}/api/parse-xbrl?url=${encodeURIComponent(queryStr)}`);
+        const data = response.data.data;
+        
+        // Convert raw Rupees from XBRL into Lakhs for standard rendering
+        const toLakhs = (valStr) => {
+          if (!valStr) return 0;
+          const val = parseFloat(valStr);
+          return isNaN(val) ? 0 : val / 100000;
+        };
+
+        const q = data.financials.quarterly || {};
+        const c = data.financials.cumulative || {};
+
+        const resCmpData = [];
+        if (q.total_income || q.revenue) {
+          resCmpData.push({
+            re_from_dt: data.period.start,
+            re_to_dt: data.period.end,
+            re_total_inc: toLakhs(q.total_income || q.revenue),
+            re_net_profit: toLakhs(q.net_profit),
+            re_basic_eps_for_cont_dic_opr: q.basic_eps || '0',
+            re_dilut_eps_for_cont_dic_opr: q.diluted_eps || '0',
+            re_tax: toLakhs(q.tax),
+            re_face_val: q.face_value || '10',
+            re_res_type: data.nature_of_report === 'Standalone' ? 'A' : 'C',
+            re_create_dt: '—'
+          });
+        }
+
+        if (c.total_income || c.revenue) {
+          resCmpData.push({
+            re_from_dt: 'YTD Start',
+            re_to_dt: data.period.end,
+            re_total_inc: toLakhs(c.total_income || c.revenue),
+            re_net_profit: toLakhs(c.net_profit),
+            re_basic_eps_for_cont_dic_opr: c.basic_eps || '0',
+            re_dilut_eps_for_cont_dic_opr: c.diluted_eps || '0',
+            re_tax: toLakhs(c.tax),
+            re_face_val: c.face_value || '10',
+            re_res_type: data.nature_of_report === 'Standalone' ? 'A' : 'C',
+            re_create_dt: '—'
+          });
+        }
+
+        const filings = {
+          quarterly: [
+            {
+              financialYear: data.quarter,
+              audited: data.nature_of_report,
+              relatingTo: 'XBRL Document Link',
+              broadCastDate: 'Parsed URL',
+              xbrl: data.document_url
+            }
+          ],
+          half_yearly: [],
+          annual: []
+        };
+
+        const mappedResult = {
+          company_name: data.company_name,
+          symbol: data.symbol,
+          is_xbrl_parsed: true,
+          xbrl_url: data.document_url,
+          quote: null,
+          past_results: {
+            resCmpData: resCmpData
+          },
+          filings: filings
+        };
+
+        setSearchResult(mappedResult);
+      } else {
+        const response = await axios.get(`${API_BASE_URL}/nse/search/${queryStr.toUpperCase()}`);
+        setSearchResult(response.data.data);
+      }
     } catch (err) {
       console.error(err);
-      setSearchError(err.response?.data?.detail || 'Failed to fetch stock results. Please try again.');
+      setSearchError(err.response?.data?.detail || 'Failed to fetch or parse stock results. Please check your query/URL.');
       setSearchResult(null);
     } finally {
       setSearchLoading(false);
@@ -254,6 +332,23 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
               {searchResult && !searchLoading && (
                 <div className="space-y-6">
                   
+                  {searchResult.is_xbrl_parsed && (
+                    <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 shadow-sm">
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
+                        <div>
+                          <h4 className="text-xs font-black text-emerald-800 uppercase tracking-wide">XBRL Document Loaded Successfully</h4>
+                          <p className="text-[11px] text-emerald-600 font-semibold mt-0.5 max-w-xl truncate">
+                            Parsed live financial figures from: <span className="underline select-all">{searchResult.xbrl_url}</span>
+                          </p>
+                        </div>
+                      </div>
+                      <span className="px-3 py-1 bg-emerald-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-sm">
+                        Parsed Live Data
+                      </span>
+                    </div>
+                  )}
+
                   {/* Company Info Header */}
                   <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div>
@@ -270,6 +365,23 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                         >
                           🔄 Refresh
                         </button>
+                        {searchResult.is_xbrl_parsed && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const downloadUrl = `${API_BASE_URL}/api/download-xbrl-pdf?url=${encodeURIComponent(searchResult.xbrl_url)}`;
+                              const link = document.createElement('a');
+                              link.href = downloadUrl;
+                              link.setAttribute('download', `XBRL_Report_${searchResult.symbol}.pdf`);
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                            }}
+                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-700 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                          >
+                            📥 Download PDF Report
+                          </button>
+                        )}
                       </div>
                       <p className="text-xs text-slate-400 mt-1">NSE India Corporate Filings & Financial Results Dashboard</p>
                     </div>
@@ -354,259 +466,103 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                     </div>
                   )}
 
-                  {/* Financial Results Trend Table */}
-                  <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
-                    <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                      <div>
-                        <h3 className="text-sm font-black text-slate-800">Quarterly Results History</h3>
-                        <p className="text-[11px] text-slate-400 mt-0.5">Historical trend extracted from Results API filings</p>
-                      </div>
-                      <span className="px-2.5 py-0.5 bg-slate-200/60 rounded-full text-[10px] font-bold text-slate-500">
-                        {searchResult.past_results?.resCmpData?.length || 0} Periods
-                      </span>
-                    </div>
 
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-slate-100 bg-slate-50 text-slate-500 font-bold">
-                            <th className="text-left px-5 py-3 text-[10px] uppercase tracking-wider">From Date</th>
-                            <th className="text-left px-5 py-3 text-[10px] uppercase tracking-wider">To Date</th>
-                            <th className="text-right px-5 py-3 text-[10px] uppercase tracking-wider">Total Income</th>
-                            <th className="text-right px-5 py-3 text-[10px] uppercase tracking-wider">Net Profit</th>
-                            <th className="text-right px-5 py-3 text-[10px] uppercase tracking-wider">Basic EPS</th>
-                            <th className="text-center px-5 py-3 text-[10px] uppercase tracking-wider">Audit Status</th>
-                            <th className="text-center px-5 py-3 text-[10px] uppercase tracking-wider">Filing Date</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {searchResult.past_results?.resCmpData?.map((item, idx) => (
-                            <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors">
-                              <td className="px-5 py-3 text-xs font-semibold text-slate-600">{item.re_from_dt}</td>
-                              <td className="px-5 py-3 text-xs font-semibold text-slate-600">{item.re_to_dt}</td>
-                              <td className="px-5 py-3 text-right font-bold text-slate-800">
-                                {formatNumber(item.re_total_inc)}
-                              </td>
-                              <td className={`px-5 py-3 text-right font-bold ${parseFloat(item.re_net_profit) >= 0 ? 'text-slate-800' : 'text-rose-600'}`}>
-                                {formatNumber(item.re_net_profit)}
-                              </td>
-                              <td className="px-5 py-3 text-right font-extrabold text-slate-700">
-                                {item.re_basic_eps_for_cont_dic_opr ? `₹ ${parseFloat(item.re_basic_eps_for_cont_dic_opr).toFixed(2)}` : '—'}
-                              </td>
-                              <td className="px-5 py-3 text-center">
-                                <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-bold ${item.re_res_type === 'A' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-amber-50 text-amber-700 border border-amber-100'}`}>
-                                  {item.re_res_type === 'A' ? 'Audited' : 'Un-audited'}
-                                </span>
-                              </td>
-                              <td className="px-5 py-3 text-center text-xs font-semibold text-slate-400">{item.re_create_dt}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
 
-                  {/* Expense Breakdown of Latest Period */}
-                  {searchResult.past_results?.resCmpData?.length > 0 && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Expense Breakdown */}
-                      <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
-                        <h3 className="text-sm font-black text-slate-800 mb-3">Operating Expense Structure</h3>
-                        <div className="space-y-3.5">
-                          {/* Raw Materials */}
-                          <div>
-                            <div className="flex justify-between text-xs font-semibold text-slate-500 mb-1">
-                              <span>Raw Materials Consumption</span>
-                              <span className="text-slate-800 font-bold">
-                                {formatNumber(searchResult.past_results.resCmpData[0].re_rawmat_consump)}
-                              </span>
-                            </div>
-                            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                              <div 
-                                className="bg-slate-700 h-full rounded-full" 
-                                style={{ 
-                                  width: `${Math.min(100, (parseFloat(searchResult.past_results.resCmpData[0].re_rawmat_consump) / parseFloat(searchResult.past_results.resCmpData[0].re_total_inc)) * 100 || 0)}%` 
-                                }}
-                              ></div>
-                            </div>
-                          </div>
-
-                          {/* Employee Benefits */}
-                          <div>
-                            <div className="flex justify-between text-xs font-semibold text-slate-500 mb-1">
-                              <span>Employee Benefit Cost</span>
-                              <span className="text-slate-800 font-bold">
-                                {formatNumber(searchResult.past_results.resCmpData[0].re_staff_cost)}
-                              </span>
-                            </div>
-                            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                              <div 
-                                className="bg-slate-700 h-full rounded-full" 
-                                style={{ 
-                                  width: `${Math.min(100, (parseFloat(searchResult.past_results.resCmpData[0].re_staff_cost) / parseFloat(searchResult.past_results.resCmpData[0].re_total_inc)) * 100 || 0)}%` 
-                                }}
-                              ></div>
-                            </div>
-                          </div>
-
-                          {/* Finance Costs / Interest */}
-                          <div>
-                            <div className="flex justify-between text-xs font-semibold text-slate-500 mb-1">
-                              <span>Finance Costs (Interest)</span>
-                              <span className="text-slate-800 font-bold">
-                                {formatNumber(searchResult.past_results.resCmpData[0].re_int_new)}
-                              </span>
-                            </div>
-                            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                              <div 
-                                className="bg-slate-700 h-full rounded-full" 
-                                style={{ 
-                                  width: `${Math.min(100, (parseFloat(searchResult.past_results.resCmpData[0].re_int_new) / parseFloat(searchResult.past_results.resCmpData[0].re_total_inc)) * 100 || 0)}%` 
-                                }}
-                              ></div>
-                            </div>
-                          </div>
-
-                          {/* Depreciation */}
-                          <div>
-                            <div className="flex justify-between text-xs font-semibold text-slate-500 mb-1">
-                              <span>Depreciation & Amortisation</span>
-                              <span className="text-slate-800 font-bold">
-                                {formatNumber(searchResult.past_results.resCmpData[0].re_depr_und_exp)}
-                              </span>
-                            </div>
-                            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                              <div 
-                                className="bg-slate-700 h-full rounded-full" 
-                                style={{ 
-                                  width: `${Math.min(100, (parseFloat(searchResult.past_results.resCmpData[0].re_depr_und_exp) / parseFloat(searchResult.past_results.resCmpData[0].re_total_inc)) * 100 || 0)}%` 
-                                }}
-                              ></div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Notes / Ratios */}
-                      <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                  {/* Earnings Concalls & Presentations (Screener.in Scraped) */}
+                  {searchResult.concalls && searchResult.concalls.length > 0 && (
+                    <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
+                      <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
                         <div>
-                          <h3 className="text-sm font-black text-slate-800 mb-3">Solvency & Debt Ratios</h3>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl">
-                              <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Debt Equity Ratio</span>
-                              <span className="text-base font-black text-slate-800 mt-0.5 block">
-                                {searchResult.past_results.resCmpData[0].re_debt_eqt_rat || '—'}
-                              </span>
-                            </div>
-
-                            <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl">
-                              <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Interest Coverage</span>
-                              <span className="text-base font-black text-slate-800 mt-0.5 block">
-                                {searchResult.past_results.resCmpData[0].re_int_ser_cov || '—'}
-                              </span>
-                            </div>
-
-                            <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl">
-                              <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Debt Service Coverage</span>
-                              <span className="text-base font-black text-slate-800 mt-0.5 block">
-                                {searchResult.past_results.resCmpData[0].re_debt_ser_cov || '—'}
-                              </span>
-                            </div>
-
-                            <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl">
-                              <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Book Face Value</span>
-                              <span className="text-base font-black text-slate-800 mt-0.5 block">
-                                ₹ {searchResult.past_results.resCmpData[0].re_face_val || '—'}
-                              </span>
-                            </div>
-                          </div>
+                          <h3 className="text-sm font-black text-slate-800">Earnings Concalls & Presentations</h3>
+                          <p className="text-[11px] text-slate-400 mt-0.5">Scraped real-time from Screener.in</p>
                         </div>
-
-                        <div className="mt-4 pt-3 border-t border-slate-100 text-[11px] text-slate-400 leading-relaxed font-semibold">
-                          ℹ️ All figures formatted to Indian Rupees (Lakhs / Crores) as per NSE India filings database.
-                        </div>
+                        <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px] font-bold">
+                          {searchResult.concalls.length} Periods Available
+                        </span>
                       </div>
-                    </div>
-                  )}
 
-                  {/* Latest Filings by Period */}
-                  <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
-                    <div className="px-5 py-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-slate-50/50">
-                      <div>
-                        <h3 className="text-sm font-black text-slate-800">Latest Live Corporate Filings</h3>
-                        <p className="text-[11px] text-slate-400 mt-0.5">Real-time filings fetched directly from NSE India</p>
-                      </div>
-                      
-                      <div className="flex bg-slate-100/80 p-0.5 rounded-lg border border-slate-200/40">
-                        {['quarterly', 'half_yearly', 'annual'].map((tab) => (
-                          <button
-                            key={tab}
-                            type="button"
-                            onClick={() => setActiveFilingTab(tab)}
-                            className={`px-3 py-1 text-[10px] font-black rounded-md transition-all cursor-pointer capitalize ${activeFilingTab === tab ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                          >
-                            {tab === 'half_yearly' ? 'Half-Yearly' : tab}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-slate-100 bg-slate-50 text-slate-500 font-bold">
-                            <th className="text-left px-5 py-3 text-[10px] uppercase tracking-wider font-extrabold">Filing Period</th>
-                            <th className="text-center px-5 py-3 text-[10px] uppercase tracking-wider font-extrabold">Audit Status</th>
-                            <th className="text-center px-5 py-3 text-[10px] uppercase tracking-wider font-extrabold">Relating To</th>
-                            <th className="text-center px-5 py-3 text-[10px] uppercase tracking-wider font-extrabold">Broadcast Date</th>
-                            <th className="text-center px-5 py-3 text-[10px] uppercase tracking-wider font-extrabold">Filing Document</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {searchResult.filings && searchResult.filings[activeFilingTab] && searchResult.filings[activeFilingTab].length > 0 ? (
-                            searchResult.filings[activeFilingTab].map((item, idx) => (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-slate-100 bg-slate-50 text-slate-500 font-bold">
+                              <th className="text-left px-5 py-3 text-[10px] uppercase tracking-wider font-extrabold">Concall Period</th>
+                              <th className="text-center px-5 py-3 text-[10px] uppercase tracking-wider font-extrabold">Transcript</th>
+                              <th className="text-center px-5 py-3 text-[10px] uppercase tracking-wider font-extrabold">AI Summary</th>
+                              <th className="text-center px-5 py-3 text-[10px] uppercase tracking-wider font-extrabold">Presentation (PPT)</th>
+                              <th className="text-center px-5 py-3 text-[10px] uppercase tracking-wider font-extrabold">Audio Recording</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {searchResult.concalls.map((concall, idx) => (
                               <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors">
-                                <td className="px-5 py-3 text-xs font-semibold text-slate-600">
-                                  {item.financialYear || '—'}
-                                </td>
+                                <td className="px-5 py-3 text-xs font-bold text-slate-700">{concall.date}</td>
+                                
                                 <td className="px-5 py-3 text-center">
-                                  <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-bold ${item.audited === 'Audited' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-amber-50 text-amber-700 border border-amber-100'}`}>
-                                    {item.audited || 'Unaudited'}
-                                  </span>
-                                </td>
-                                <td className="px-5 py-3 text-center text-xs font-semibold text-slate-600">
-                                  {item.relatingTo || '—'}
-                                </td>
-                                <td className="px-5 py-3 text-center text-xs font-semibold text-slate-400">
-                                  {item.broadCastDate || '—'}
-                                </td>
-                                <td className="px-5 py-3 text-center">
-                                  {item.xbrl && item.xbrl !== '-' ? (
+                                  {concall.transcript ? (
                                     <a
-                                      href={item.xbrl}
+                                      href={concall.transcript}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1 text-xs font-black text-slate-800 hover:text-slate-600 transition-colors"
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold transition-all"
                                     >
-                                      XBRL Filing ↗
+                                      Transcript 📄
                                     </a>
                                   ) : (
-                                    <span className="text-slate-300">—</span>
+                                    <span className="text-slate-300 text-xs">—</span>
+                                  )}
+                                </td>
+
+                                <td className="px-5 py-3 text-center">
+                                  {concall.summary ? (
+                                    <a
+                                      href={concall.summary}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-100 rounded-lg text-xs font-semibold transition-all"
+                                    >
+                                      AI Summary 💡
+                                    </a>
+                                  ) : (
+                                    <span className="text-slate-300 text-xs">—</span>
+                                  )}
+                                </td>
+
+                                <td className="px-5 py-3 text-center">
+                                  {concall.ppt ? (
+                                    <a
+                                      href={concall.ppt}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-100 rounded-lg text-xs font-black transition-all"
+                                    >
+                                      Download PPT 📥
+                                    </a>
+                                  ) : (
+                                    <span className="text-slate-300 text-xs font-semibold">Not Available</span>
+                                  )}
+                                </td>
+
+                                <td className="px-5 py-3 text-center">
+                                  {concall.rec ? (
+                                    <a
+                                      href={concall.rec}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-100 rounded-lg text-xs font-semibold transition-all"
+                                    >
+                                      Audio 🎧
+                                    </a>
+                                  ) : (
+                                    <span className="text-slate-300 text-xs">—</span>
                                   )}
                                 </td>
                               </tr>
-                            ))
-                          ) : (
-                            <tr>
-                              <td colSpan="5" className="text-center py-8 text-xs text-slate-400 font-semibold">
-                                No recent {activeFilingTab === 'half_yearly' ? 'half-yearly' : activeFilingTab} filings found on NSE for this stock.
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                 </div>
               )}
