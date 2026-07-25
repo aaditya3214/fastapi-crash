@@ -659,33 +659,13 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                           <thead>
                             <tr className="border-b border-slate-100 bg-slate-50 text-slate-500 font-bold">
                               <th className="text-left px-5 py-3 text-[10px] uppercase tracking-wider font-extrabold">Concall Period</th>
-                              <th className="text-center px-5 py-3 text-[10px] uppercase tracking-wider font-extrabold">AI Summary</th>
                               <th className="text-center px-5 py-3 text-[10px] uppercase tracking-wider font-extrabold">Presentation (PPT)</th>
-                              <th className="text-center px-5 py-3 text-[10px] uppercase tracking-wider font-extrabold">Audio Recording</th>
                             </tr>
                           </thead>
                           <tbody>
                             {searchResult.concalls.map((concall, idx) => (
                               <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors">
                                 <td className="px-5 py-3 text-xs font-bold text-slate-700">{concall.date}</td>
-                                
-                                <td className="px-5 py-3 text-center">
-                                  {concall.summary || concall.ppt ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setSummaryError(null);
-                                        setSelectedPdfSummary(null);
-                                        setUploadModalTarget({ concall, pptUrl: concall.ppt });
-                                      }}
-                                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-100 rounded-lg text-xs font-semibold transition-all cursor-pointer"
-                                    >
-                                      AI Summary 💡
-                                    </button>
-                                  ) : (
-                                    <span className="text-slate-300 text-xs">—</span>
-                                  )}
-                                </td>
 
                                 <td className="px-5 py-3 text-center">
                                   <div className="flex items-center justify-center gap-2">
@@ -715,21 +695,6 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                                       <span className="text-slate-300 text-xs font-semibold">Not Available</span>
                                     )}
                                   </div>
-                                </td>
-
-                                <td className="px-5 py-3 text-center">
-                                  {concall.rec ? (
-                                    <a
-                                      href={concall.rec}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-100 rounded-lg text-xs font-semibold transition-all"
-                                    >
-                                      Audio 🎧
-                                    </a>
-                                  ) : (
-                                    <span className="text-slate-300 text-xs">—</span>
-                                  )}
                                 </td>
                               </tr>
                             ))}
