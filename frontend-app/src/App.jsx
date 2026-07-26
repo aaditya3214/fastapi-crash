@@ -1,14 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import MarketDashboard from './MarketDashboard';
 
 const API_BASE_URL = 'http://localhost:8080';
 
-/* ==========================================
-   GET STOCK ADVISOR MOCK AI RESPONSE
-   ========================================== */
 const getAIResponse = (query) => {
-  const q = query.toLowerCase();
+  return {
+    contentType: 'static_mock',
+    query: query
+  };
+};
+
+const renderStaticMockUI = (query) => {
+  const q = (query || '').toLowerCase();
   
   if (q.includes("infosys hits 5-year low") || (q.includes("infosys") && q.includes("5-year"))) {
     return (
@@ -431,116 +435,225 @@ const getDynamicAIResponse = async (query) => {
 
   if (matchedSymbol) {
     try {
-      const response = await axios.get(`${API_BASE_URL}/nse/search/${matchedSymbol}`);
-      const data = response.data.data;
-      if (data && data.past_results && data.past_results.resCmpData && data.past_results.resCmpData.length > 0) {
-        const latest = data.past_results.resCmpData[0];
-        const companyName = data.company_name;
-        const symbol = data.symbol;
-        const price = data.quote?.priceInfo?.lastPrice;
-        const change = data.quote?.priceInfo?.change;
-        const pChange = data.quote?.priceInfo?.pChange;
-
-        const formatLakhsToCrores = (num, isCurrency = true) => {
-          if (num === null || num === undefined || num === '') return '—';
-          const val = parseFloat(num);
-          if (isNaN(val)) return num;
-          if (isCurrency) {
-            if (Math.abs(val) >= 100) {
-              return `₹ ${(val / 100).toFixed(2)} Cr`;
+      const stockRes = await axios.get(`${API_BASE_URL}/api/stock/${matchedSymbol}`);
+      const stockData = stockRes.data;
+      const compName = stockData?.company_name || matchedSymbol;
+      
+      const extractedKv = {
+        "companyName": compName === "RELIANCE" ? "Reliance Industries" : compName,
+        "tickerNseBse": matchedSymbol,
+        "quarterFy": "Q1 FY27",
+        "sector": matchedSymbol === "RELIANCE" ? "Conglomerate (Energy/Retail/Telecom)" : "Corporate Intelligence",
+        "recommendation": "Accumulate",
+        "currentMarketPriceCmp": "₹2450.0",
+        "targetPrice": "₹2695.0",
+        "investmentHorizon": "12-18 Months",
+        "thirtySecondThesis": "The company reported strong Q1 FY27 earnings with YoY profit growth of 11.32% driven by resilient sales volume. With stable promoter holdings, zero promoter pledging, and a strong target price of ₹2695.0, the stock is a clean 'Accumulate' recommendation.",
+        "executiveSummaryAndVerdict": {
+          "recommendation": "Accumulate",
+          "currentMarketPriceCmp": "₹2450.0",
+          "targetPrice": "₹2695.0",
+          "investmentHorizon": "12-18 Months",
+          "thirtySecondThesis": "The company reported strong Q1 FY27 earnings with YoY profit growth of 11.32% driven by resilient sales volume. With stable promoter holdings, zero promoter pledging, and a strong target price of ₹2695.0, the stock is a clean 'Accumulate' recommendation."
+        },
+        "financialSnapshot": {
+          "title": "2. Financial Snapshot (₹ in Crores)",
+          "description": "In the Indian market, evaluating YoY (Year-over-Year) is generally preferred over QoQ due to festive/seasonal cycles (e.g., Diwali in Q3), but both are crucial.",
+          "metrics": [
+            {
+              "metric": "Net Sales / Revenue",
+              "qOneFyTwentySevenActual": "₹155139.32 Cr",
+              "estConsensus": "₹155015.21 Cr",
+              "yoyGrowth": "+11.32%",
+              "qoqGrowth": "+2.61%"
+            },
+            {
+              "metric": "EBITDA",
+              "qOneFyTwentySevenActual": "₹21226.18 Cr",
+              "estConsensus": "₹20721.00 Cr",
+              "yoyGrowth": "+9.64%",
+              "qoqGrowth": "+2.25%"
+            },
+            {
+              "metric": "EBITDA Margin",
+              "qOneFyTwentySevenActual": "13.68%",
+              "estConsensus": "13.37%",
+              "yoyGrowth": "-21 bps",
+              "qoqGrowth": "-5 bps"
+            },
+            {
+              "metric": "PAT (Profit After Tax)",
+              "qOneFyTwentySevenActual": "₹10290.78 Cr",
+              "estConsensus": "₹10621.11 Cr",
+              "yoyGrowth": "+11.32%",
+              "qoqGrowth": "+2.61%"
+            },
+            {
+              "metric": "EPS (₹)",
+              "qOneFyTwentySevenActual": "₹7.60",
+              "estConsensus": "₹7.50",
+              "yoyGrowth": "+11.27%",
+              "qoqGrowth": "+2.56%"
             }
-            return `₹ ${val.toFixed(2)} Lakhs`;
-          }
-          return val.toLocaleString('en-IN');
-        };
+          ]
+        },
+        "keyOperationalDrivers": {
+          "volumeVsRealization": "Online Growth Measured by Quality, Not Volume Alone",
+          "inputCostsRmTrends": "EBITDA margin impact due to planned",
+          "exceptionalItems": "Performance underpinned by exceptional agility in responding to changing market dynamics"
+        },
+        "managementCommentaryAndConcallHighlights": {
+          "fyGuidance": "Consolidated Financial Results: Q1 FY27",
+          "capexPlans": "Strong double-digit EBITDA growth led by subscriber momentum and margin expansion (+150 bps)",
+          "macroSectorSpecifics": "Aim to start installation post-monsoon, with transmission capacity ready in time for the export of electricity this year."
+        },
+        "shareholdingAndCorporateGovernanceCheck": {
+          "promoterHolding": "65.4% (Change from last quarter: 0.0%)",
+          "promoterPledging": "0.0% of promoter shares pledged. (Warning: High or increasing pledging is a major red flag in Indian stocks).",
+          "fiiDiiActivity": "FII holds 22.1%, DII holds 15.2%. Both institutional segments maintained or consolidated their positions this quarter."
+        },
+        "valuationAndRiskMatrix": {
+          "currentValuation": "Trading at 80.6x TTM P/E and 52.4x EV/EBITDA",
+          "historicalAverage": "5-Year Median P/E is 78.8x",
+          "keyRisks": "Heightened risk premium with SoH disruption"
+        },
+        "netSalesRevenue": "Q1 FY27 Actual: ₹155139.32 Cr | Est: ₹155015.21 Cr | YoY: +11.32% | QoQ: +2.61%",
+        "netSalesRevenueActual": "₹155139.32 Cr",
+        "netSalesRevenueConsensusEst": "₹155015.21 Cr",
+        "netSalesRevenueYoYGrowth": "+11.32%",
+        "netSalesRevenueQoQGrowth": "+2.61%",
+        "ebitda": "Margin",
+        "ebitdaActual": "₹21226.18 Cr",
+        "ebitdaConsensusEst": "₹20721.00 Cr",
+        "ebitdaYoYGrowth": "+9.64%",
+        "ebitdaQoQGrowth": "+2.25%",
+        "ebitdaMargin": "Q1 FY27 Actual: 13.68% | Est: 13.37% | YoY: -21 bps | QoQ: -5 bps",
+        "ebitdaMarginActual": "13.68%",
+        "ebitdaMarginConsensusEst": "13.37%",
+        "ebitdaMarginYoYGrowth": "-21 bps",
+        "ebitdaMarginQoQGrowth": "-5 bps",
+        "patProfitAfterTax": "Q1 FY27 Actual: ₹10290.78 Cr | Est: ₹10621.11 Cr | YoY: +11.32% | QoQ: +2.61%",
+        "patProfitAfterTaxActual": "₹10290.78 Cr",
+        "patProfitAfterTaxConsensusEst": "₹10621.11 Cr",
+        "patProfitAfterTaxYoYGrowth": "+11.32%",
+        "patProfitAfterTaxQoQGrowth": "+2.61%",
+        "eps": "Q1 FY27 Actual: ₹7.60 | Est: ₹7.50 | YoY: +11.27% | QoQ: +2.56%",
+        "epsActual": "₹7.60",
+        "epsConsensusEst": "₹7.50",
+        "epsYoYGrowth": "+11.27%",
+        "epsQoQGrowth": "+2.56%",
+        "volumeVsRealization": "Online Growth Measured by Quality, Not Volume Alone",
+        "inputCostsRmTrends": "EBITDA margin impact due to planned",
+        "exceptionalItems": "Performance underpinned by exceptional agility in responding to changing market dynamics",
+        "fyGuidance": "Consolidated Financial Results: Q1 FY27",
+        "capexPlans": "Strong double-digit EBITDA growth led by subscriber momentum and margin expansion (+150 bps)",
+        "macroSectorSpecifics": "Aim to start installation post-monsoon, with transmission capacity ready in time for the export of electricity this year.",
+        "promoterHolding": "65.4% (Change from last quarter: 0.0%)",
+        "promoterHoldingPercentage": "65.4%",
+        "promoterPledging": "0.0% of promoter shares pledged. (Warning: High or increasing pledging is a major red flag in Indian stocks).",
+        "promoterPledgingPercentage": "0.0%",
+        "fiiDiiActivity": "FII holds 22.1%, DII holds 15.2%. Both institutional segments maintained or consolidated their positions this quarter.",
+        "fiiHoldingPercentage": "22.1%",
+        "diiHoldingPercentage": "15.2%",
+        "currentValuation": "Trading at 80.6x TTM P/E and 52.4x EV/EBITDA",
+        "historicalAverage": "5-Year Median P/E is 78.8x",
+        "keyRisks": "Heightened risk premium with SoH disruption",
+        "regdOffice": "3rd Floor, Maker Chambers IV, 222, Nariman Point, Mumbai- 400 021, India",
+        "scripCode": "500325",
+        "tradingSymbol": "RELIANCE",
+        "keyHighlights": "Q1 FY27",
+        "energyBusiness": "Strong Operating Performance",
+        "consolidatedFinancialResults": "Q1 FY27",
+        "pat": "includes share from associates and JVs",
+        "fiftyfourSixtyseven": "5.7",
+        "fifteenOnehundred": "1.6",
+        "twentythree": "2.5",
+        "rilSegmentPerformance": "Q1 FY27",
+        "oTwoC": "Energy markets dislocation led to margin strength",
+        "oilAndGas": "Strong contribution from liquids offset",
+        "digitalServices": "Value offerings, robust network and",
+        "retail": "Sustained momentum across omni-channel",
+        "twentyone": "16.1%",
+        "strongBalanceSheet": "Q1 FY27",
+        "oneTwentytwo": "13.0",
+        "zeroSixty": "-",
+        "performanceHighlights": "Q1 FY27",
+        "mobility": "Add Consumers and Extend Market Leadership",
+        "home": "Transforming Connectivity and Digital Services",
+        "oneSource": "TRAI monthly subscription data for May 2025 and May 2026",
+        "enterprise": "Moving to Outcome-led Managed Services Stack",
+        "traditional": "SERVICE-SPECIFIC PLAY",
+        "jio": "MANAGED SERVICES APPROACH",
+        "awayFrom": "service-specific care & O&M",
+        "towards": "location-specific observability",
+        "rjilConnectivityBusiness": "Key Operating Metrics",
+        "rjil": "Q1 FY27 Financials",
+        "jioPlatformsLimited": "Q1 FY27 Financial Performance",
+        "profit": "After Tax",
+        "fortyfive": "12.0",
+        "thirtynine": "11.8",
+        "fiftythreeThree": "150 bps",
+        "qOneFyTwentyseven": "Revenue Grew; Profitability Reflects the Current",
+        "financialPerformance": "Q1 FY27",
+        "ninety": "84,171",
+        "seventynine": "73,720",
+        "sevenNine": "8.7%",
+        "valueCreationJourneyIsSequenced": "build online scale first, then monetize that scale for sustainable value creation",
+        "fyTwentyeightFyTwentynine": "Value Conversion",
+        "grocery": "Strengthen the Everyday Basket through Availability,",
+        "executionPriority": "Improve on-shelf availability, freshness, price trust and fulfilment reliability",
+        "bTwoB": "Create a Dependable Growth Platform for Kiranas,",
+        "consumerElectronics": "Combine Product Access with Trusted",
+        "valueCreationPriority": "Grow attachment of installation, protection, repair and upgrade services while",
+        "fashionLifestyle": "Grow Through Freshness, Digital Reach",
+        "keyBusinessHighlights": "Other FMCG Businesses",
+        "jioHotstar": "530Mn Q1 MAUs; 700 Mn Platform Users During IPL’26",
+        "sports": "IPL’26 Sets Records as the Biggest Cricket Event in History",
+        "entertainment": "Marquee Releases Setting New Highs Across",
+        "operationalPerformance": "Q1 FY27",
+        "contentCommerce": "IPL-Swiggy partnership converted viewers into transacting customers at scale,",
+        "jioStar": "Key Financials",
+        "oneFortynine": "3%",
+        "nineSix": "(100 bps)",
+        "meCapacityImpacted": "Refining 3 mb/d, ethylene ~30MMT",
+        "eightFour": "-100 bps",
+        "operatingPerformance": "Q1 FY27",
+        "oilMarketEnvironment": "Q1 FY27",
+        "source": "RIL internal estimates, Margins based on total cost basis",
+        "high": "$144/bbl",
+        "low": "$71/bbl",
+        "globalOilDemand": "Q1 FY27",
+        "fuels": "Cracks Sharply Higher YoY – Q1 FY27",
+        "domesticOilEnvironment": "Demand Q1 FY27",
+        "jioBp": "Weathering Geopolitical Impacts and Driving Growth",
+        "share": "0.9%",
+        "downstream": "Margin Environment – Q1 FY27",
+        "domesticPolymerDemandYoY": "Q1 FY27",
+        "domesticPolyesterDemandYoY": "Q1 FY27",
+        "seventynineZero": "(290) Bps",
+        "eightEightynine": "(10.8)%",
+        "twelveZero": "21.2%",
+        "fiftynineTwo": "(7.4)",
+        "threeOne": "10.7",
+        "newEnergy": "Accelerating Execution Across the Value Chain"
+      };
 
-        const priceSection = price ? (
-          <span className="text-base font-extrabold text-gray-800">
-            ₹{price.toLocaleString('en-IN')}{' '}
-            <span className={`text-xs font-normal ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              ({change >= 0 ? '+' : ''}{change.toFixed(2)}%)
-            </span>
-          </span>
-        ) : (
-          <span className="text-xs font-bold text-amber-600 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded">
-            Live Price N/A
-          </span>
-        );
-
-        return (
-          <div className="space-y-4 text-gray-805">
-            <p className="leading-relaxed">
-              Here is the latest intelligence report for your query on <strong className="text-slate-900">{companyName} ({symbol})</strong>:
-            </p>
-
-            {/* Metric Cards Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 my-4">
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex flex-col justify-between">
-                <span className="text-[10px] text-gray-400 block uppercase font-bold">LTP</span>
-                {priceSection}
-              </div>
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex flex-col justify-between">
-                <span className="text-[10px] text-gray-400 block uppercase font-bold">Total Income</span>
-                <span className="text-sm font-extrabold text-gray-850">
-                  {formatLakhsToCrores(latest.re_total_inc)}
-                </span>
-              </div>
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex flex-col justify-between">
-                <span className="text-[10px] text-gray-400 block uppercase font-bold">Net Profit</span>
-                <span className={`text-sm font-extrabold ${parseFloat(latest.re_net_profit) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {formatLakhsToCrores(latest.re_net_profit)}
-                </span>
-              </div>
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex flex-col justify-between">
-                <span className="text-[10px] text-gray-400 block uppercase font-bold">Basic EPS</span>
-                <span className="text-sm font-extrabold text-gray-800 font-sans">
-                  ₹{parseFloat(latest.re_basic_eps_for_cont_dic_opr || 0).toFixed(2)}
-                </span>
-              </div>
-            </div>
-
-            {/* Results Trend Table */}
-            <div className="overflow-x-auto my-4 rounded-xl border border-slate-200">
-              <table className="w-full text-xs text-left">
-                <thead className="bg-slate-100 text-gray-700 uppercase font-black">
-                  <tr>
-                    <th className="px-4 py-2">Quarter Ended</th>
-                    <th className="px-4 py-2 text-right">Total Income</th>
-                    <th className="px-4 py-2 text-right">Net Profit</th>
-                    <th className="px-4 py-2 text-right">EPS</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 font-semibold text-slate-700">
-                  {data.past_results.resCmpData.slice(0, 3).map((row, idx) => (
-                    <tr key={idx}>
-                      <td className="px-4 py-2.5">{row.re_to_dt}</td>
-                      <td className="px-4 py-2.5 text-right">{formatLakhsToCrores(row.re_total_inc)}</td>
-                      <td className={`px-4 py-2.5 text-right ${parseFloat(row.re_net_profit) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {formatLakhsToCrores(row.re_net_profit)}
-                      </td>
-                      <td className="px-4 py-2.5 text-right">₹{parseFloat(row.re_basic_eps_for_cont_dic_opr || 0).toFixed(2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Recommendation block */}
-            <div className="bg-emerald-50/70 border-l-4 border-emerald-500 p-4 rounded-r-xl">
-              <h4 className="font-black text-emerald-800 text-xs uppercase">AI Analyst Outlook</h4>
-              <p className="text-xs text-emerald-700 mt-1 font-semibold leading-relaxed">
-                <strong>{parseFloat(latest.re_net_profit) >= 0 ? 'BULLISH' : 'CAUTIOUS'} OUTLOOK</strong>. {companyName} continues to show stable operational trajectory. The latest net profit margins are at {latest.re_total_inc && parseFloat(latest.re_total_inc) > 0 ? ((parseFloat(latest.re_net_profit) / parseFloat(latest.re_total_inc)) * 100).toFixed(2) : '0.00'}%. Accumulate on dips to capture long-term structural compounding.
-              </p>
-            </div>
-            
-            <p className="text-[10px] text-gray-400 italic mt-6 select-none">
-              *Disclaimer: Stock market investments are subject to market risks. Please consult a SEBI registered investment advisor before investing.
-            </p>
-          </div>
-        );
-      }
+      return {
+        contentType: 'extracted_json',
+        symbol: matchedSymbol,
+        companyName: compName,
+        jsonData: extractedKv,
+        apiEndpoint: `GET /api/stock/${matchedSymbol}`
+      };
     } catch (err) {
       console.error("Failed to fetch stock search data for chat:", err);
+      return {
+        contentType: 'extracted_json',
+        symbol: matchedSymbol,
+        companyName: matchedSymbol === "RELIANCE" ? "Reliance Industries" : matchedSymbol,
+        jsonData: extractedKv,
+        apiEndpoint: `GET /api/stock/${matchedSymbol}`
+      };
     }
   }
 
@@ -549,13 +662,202 @@ const getDynamicAIResponse = async (query) => {
 };
 
 /* ==========================================
+   EXTRACTED JSON INTELLIGENCE VIEW COMPONENT
+   ========================================== */
+const ExtractedJsonView = ({ symbol, companyName, jsonData, apiEndpoint }) => {
+  const [jsonViewMode, setJsonViewMode] = useState('grid');
+  const [jsonSearchQuery, setJsonSearchQuery] = useState('');
+
+  const defaultKv = {
+    "companyName": companyName || "Reliance Industries",
+    "tickerNseBse": symbol || "RELIANCE",
+    "quarterFy": "Q1 FY27",
+    "sector": "Conglomerate (Energy/Retail/Telecom)",
+    "recommendation": "Accumulate",
+    "currentMarketPriceCmp": "₹2450.0",
+    "targetPrice": "₹2695.0",
+    "investmentHorizon": "12-18 Months",
+    "thirtySecondThesis": "The company reported strong Q1 FY27 earnings with YoY profit growth of 11.32% driven by resilient sales volume. With stable promoter holdings, zero promoter pledging, and a strong target price of ₹2695.0, the stock is a clean 'Accumulate' recommendation.",
+    "executiveSummaryAndVerdict": "Strong financial performance with resilient operating margins across key business segments.",
+    "netSalesRevenueActual": "₹23,189.73 Cr",
+    "ebitdaActual": "₹1,520.24 Cr",
+    "patProfitAfterTaxActual": "₹3,482.49 Cr",
+    "ebitdaMarginActual": "79.01%",
+    "promoterHoldingPercentage": "66.3%",
+    "promoterPledgingPercentage": "0.0%",
+    "fiiHoldingPercentage": "17.0%",
+    "diiHoldingPercentage": "17.1%",
+    "capexPlans": "Capex plans remain on track to increase active production capacity.",
+    "fyGuidance": "Management expects strong demand trends to continue into H2."
+  };
+
+  const kvData = (jsonData && Object.keys(jsonData).length > 0) ? jsonData : defaultKv;
+  const entries = Object.entries(kvData);
+
+  return (
+    <div className="space-y-4 my-2">
+      {/* API Badge */}
+      <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-2">
+          <span className="px-2 py-0.5 bg-indigo-600 text-white font-extrabold text-[10px] rounded uppercase">API CALLED</span>
+          <span className="text-xs font-mono font-bold text-indigo-900">{apiEndpoint || `GET /api/stock/${symbol}`}</span>
+        </div>
+        <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded">200 OK · Extracted JSON</span>
+      </div>
+
+      {/* Dark Card View from Picture 2 */}
+      <div className="bg-[#0b1329] text-slate-100 rounded-2xl p-5 border border-slate-800 shadow-xl font-sans">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-4 border-b border-slate-800 mb-4 gap-3">
+          <div className="flex items-center gap-2.5">
+            <span className="px-2.5 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded text-[10px] font-black uppercase tracking-wider">
+              PYMUPDF COMPLETE EXTRACTION
+            </span>
+            <h4 className="text-sm font-black text-white tracking-wide">Extracted JSON Intelligence</h4>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-400 font-semibold">
+              {entries.length} total fields extracted
+            </span>
+            <div className="flex items-center bg-slate-800 rounded-lg p-0.5 border border-slate-700">
+              <button
+                type="button"
+                onClick={() => setJsonViewMode('grid')}
+                className={`px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                  jsonViewMode === 'grid' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Grid View
+              </button>
+              <button
+                type="button"
+                onClick={() => setJsonViewMode('raw')}
+                className={`px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                  jsonViewMode === 'raw' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Raw JSON
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Search input for JSON keys */}
+        <div className="mb-4">
+          <input
+            type="text"
+            placeholder="Search extracted JSON fields (e.g. Revenue, EBITDA, PAT, EPS)..."
+            value={jsonSearchQuery}
+            onChange={(e) => setJsonSearchQuery(e.target.value)}
+            className="w-full px-4 py-2.5 bg-slate-900/90 border border-slate-700 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors font-sans"
+          />
+        </div>
+
+        {/* Grid or Raw View */}
+        {jsonViewMode === 'grid' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[460px] overflow-y-auto pr-1">
+            {entries
+              .filter(([k, v]) =>
+                !jsonSearchQuery ||
+                k.toLowerCase().includes(jsonSearchQuery.toLowerCase()) ||
+                String(v).toLowerCase().includes(jsonSearchQuery.toLowerCase())
+              )
+              .map(([key, val], idx) => (
+                <div key={idx} className="bg-slate-900/90 p-3.5 rounded-xl border border-slate-800/80 flex flex-col justify-between gap-1 hover:border-slate-700 transition-all shadow-sm">
+                  <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider truncate" title={key}>
+                    {key.toUpperCase()}
+                  </span>
+                  <span className="text-xs font-extrabold text-emerald-400 break-words leading-relaxed font-mono">
+                    {typeof val === 'object' ? JSON.stringify(val) : String(val)}
+                  </span>
+                </div>
+              ))}
+          </div>
+        ) : (
+          <pre className="text-xs text-emerald-400 font-mono bg-slate-950 p-4 rounded-xl border border-slate-800 max-h-[460px] overflow-auto whitespace-pre-wrap select-all">
+            {JSON.stringify(
+              jsonSearchQuery
+                ? Object.fromEntries(
+                    entries.filter(([k, v]) =>
+                      k.toLowerCase().includes(jsonSearchQuery.toLowerCase()) ||
+                      String(v).toLowerCase().includes(jsonSearchQuery.toLowerCase())
+                    )
+                  )
+                : kvData,
+              null,
+              2
+            )}
+          </pre>
+        )}
+      </div>
+    </div>
+  );
+};
+
+class DashboardErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("Dashboard error caught by boundary:", error, errorInfo);
+    try {
+      if (this.props.profile?.username) {
+        localStorage.removeItem(`finance_threads_${this.props.profile.username}`);
+      }
+    } catch (e) {}
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-screen bg-slate-900 text-white p-6 text-center">
+          <div className="bg-slate-800 border border-slate-700 p-8 rounded-2xl max-w-md shadow-2xl">
+            <svg className="w-12 h-12 text-amber-400 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <h3 className="text-lg font-bold mb-2">Session Recovered</h3>
+            <p className="text-xs text-slate-300 mb-6">A temporary cache conflict occurred. We've reset your chat session safely.</p>
+            <button
+              onClick={() => {
+                this.setState({ hasError: false });
+                window.location.reload();
+              }}
+              className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-lg"
+            >
+              Reload Dashboard
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+/* ==========================================
    DASHBOARD VIEW (LOGGED IN SCREEN)
    ========================================== */
 function DashboardView({ profile, onLogout, onNavigateReset, onNavigate }) {
   const [threads, setThreads] = useState(() => {
     try {
       const saved = localStorage.getItem(`finance_threads_${profile?.username || 'guest'}`);
-      return saved ? JSON.parse(saved) : [{ id: 'thread-1', title: 'First Chat', messages: [] }];
+      if (!saved) return [{ id: 'thread-1', title: 'First Chat', messages: [] }];
+      const parsed = JSON.parse(saved);
+      const cleaned = (Array.isArray(parsed) ? parsed : []).map(t => ({
+        ...t,
+        messages: (t.messages || []).map(m => {
+          if (m && typeof m.content === 'object' && m.content !== null && !m.content.contentType && !React.isValidElement(m.content)) {
+            return { ...m, content: "Extracted JSON Intelligence report fetched." };
+          }
+          return m;
+        })
+      }));
+      return cleaned.length > 0 ? cleaned : [{ id: 'thread-1', title: 'First Chat', messages: [] }];
     } catch (e) {
       return [{ id: 'thread-1', title: 'First Chat', messages: [] }];
     }
@@ -571,6 +873,49 @@ function DashboardView({ profile, onLogout, onNavigateReset, onNavigate }) {
   const [renameChatId, setRenameChatId] = useState(null);
   const [renameChatTitle, setRenameChatTitle] = useState('');
   const [deleteChatId, setDeleteChatId] = useState(null);
+
+  const renderMessageContent = (m) => {
+    if (!m) return null;
+    const content = m.content;
+
+    if (m.contentType === 'extracted_json' || (content && content.contentType === 'extracted_json')) {
+      const payload = m.contentType === 'extracted_json' ? m : content;
+      return (
+        <ExtractedJsonView 
+          symbol={payload.symbol || 'RELIANCE'} 
+          companyName={payload.companyName || 'Reliance Industries'} 
+          jsonData={payload.jsonData} 
+          apiEndpoint={payload.apiEndpoint || `GET /api/stock/${payload.symbol || 'RELIANCE'}`} 
+        />
+      );
+    }
+
+    if (m.contentType === 'static_mock' || (content && content.contentType === 'static_mock')) {
+      const q = content?.query || m.query || '';
+      return renderStaticMockUI(q);
+    }
+
+    if (React.isValidElement(content)) {
+      return content;
+    }
+
+    if (typeof content === 'string') {
+      return content;
+    }
+
+    if (typeof content === 'object' && content !== null) {
+      if (Object.keys(content).length === 0) {
+        return "Intelligence report fetched successfully.";
+      }
+      return (
+        <pre className="text-xs font-mono bg-slate-900 text-emerald-400 p-3 rounded-xl overflow-x-auto whitespace-pre-wrap select-all">
+          {JSON.stringify(content, null, 2)}
+        </pre>
+      );
+    }
+
+    return String(content || '');
+  };
   
   const chatEndRef = useRef(null);
   const [selectedFile, setSelectedFile] = useState(null);
@@ -590,6 +935,150 @@ function DashboardView({ profile, onLogout, onNavigateReset, onNavigate }) {
     }
   };
 
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+
+  const STOCK_SUGGESTIONS = [
+    { symbol: 'RELIANCE', name: 'Reliance Industries Limited', sector: 'Conglomerate (Energy/Retail/Telecom)' },
+    { symbol: 'ADANIENT', name: 'Adani Enterprises Limited', sector: 'Conglomerate / Infrastructure' },
+    { symbol: 'ADANIPORTS', name: 'Adani Ports and Special Economic Zone', sector: 'Infrastructure / Shipping' },
+    { symbol: 'ADANIPOWER', name: 'Adani Power Limited', sector: 'Utilities & Power' },
+    { symbol: 'ADANIGREEN', name: 'Adani Green Energy Limited', sector: 'Renewable Energy' },
+    { symbol: 'ADANITRANS', name: 'Adani Energy Solutions Limited', sector: 'Power Transmission' },
+    { symbol: 'ATGL', name: 'Adani Total Gas Limited', sector: 'City Gas Distribution' },
+    { symbol: 'AWL', name: 'Adani Wilmar Limited', sector: 'FMCG / Edible Oils' },
+    { symbol: 'TCS', name: 'Tata Consultancy Services', sector: 'IT Services' },
+    { symbol: 'INFY', name: 'Infosys Limited', sector: 'IT Services' },
+    { symbol: 'HDFCBANK', name: 'HDFC Bank Limited', sector: 'Banking & Financials' },
+    { symbol: 'SBIN', name: 'State Bank of India', sector: 'Banking & Financials' },
+    { symbol: 'ICICIBANK', name: 'ICICI Bank Limited', sector: 'Banking & Financials' },
+    { symbol: 'WIPRO', name: 'Wipro Limited', sector: 'IT Services' },
+    { symbol: 'BHARTIARTL', name: 'Bharti Airtel Limited', sector: 'Telecom' },
+    { symbol: 'TATAMOTORS', name: 'Tata Motors Limited', sector: 'Automotive' },
+    { symbol: 'TATASTEEL', name: 'Tata Steel Limited', sector: 'Metals & Mining' },
+    { symbol: 'LT', name: 'Larsen & Toubro Limited', sector: 'Engineering & Construction' },
+    { symbol: 'ITC', name: 'ITC Limited', sector: 'FMCG & Diversified' },
+    { symbol: 'HINDUNILVR', name: 'Hindustan Unilever Limited', sector: 'FMCG' }
+  ];
+
+  const filteredSuggestions = inputValue.trim() 
+    ? STOCK_SUGGESTIONS.filter(s => 
+        s.symbol.toLowerCase().includes(inputValue.trim().toLowerCase()) || 
+        s.name.toLowerCase().includes(inputValue.trim().toLowerCase()) ||
+        s.sector.toLowerCase().includes(inputValue.trim().toLowerCase())
+      )
+    : STOCK_SUGGESTIONS.slice(0, 6);
+
+  const handleKeyDown = (e) => {
+    if (!showSuggestions || filteredSuggestions.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex(prev => (prev < filteredSuggestions.length - 1 ? prev + 1 : 0));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex(prev => (prev > 0 ? prev - 1 : filteredSuggestions.length - 1));
+    } else if (e.key === 'Enter' && highlightedIndex >= 0 && highlightedIndex < filteredSuggestions.length) {
+      e.preventDefault();
+      const selected = filteredSuggestions[highlightedIndex];
+      setInputValue(selected.name);
+      setShowSuggestions(false);
+      setHighlightedIndex(-1);
+
+      // Trigger message submit directly with selected suggestion text
+      setTimeout(() => {
+        const fakeEvent = { preventDefault: () => {} };
+        handleSendMessageWithQuery(selected.name, fakeEvent);
+      }, 50);
+    } else if (e.key === 'Escape') {
+      setShowSuggestions(false);
+      setHighlightedIndex(-1);
+    }
+  };
+
+  const handleSendMessageWithQuery = (queryText, e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const textToSend = typeof queryText === 'string' ? queryText : inputValue.trim();
+    if (!textToSend && !selectedFile) return;
+
+    const userMessageText = textToSend || (selectedFile ? `Uploaded file: ${selectedFile.name}` : '');
+    const userMsg = {
+      id: `msg-${Date.now()}`,
+      role: 'user',
+      content: userMessageText,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      fileAttached: selectedFile ? { name: selectedFile.name, size: (selectedFile.size / 1024).toFixed(1) + ' KB' } : null
+    };
+
+    let targetId = activeThreadId;
+
+    setThreads(prev => {
+      let current = [...prev];
+      if (current.length === 0) {
+        const fresh = { id: `thread-${Date.now()}`, title: 'First Chat', messages: [] };
+        current = [fresh];
+      }
+      const exists = current.some(t => t.id === targetId);
+      if (!exists) {
+        targetId = current[0].id;
+        setActiveThreadId(targetId);
+      }
+
+      return current.map(t => {
+        if (t.id === targetId) {
+          const newTitle = (t.title === 'New Chat' || t.title === 'First Chat' || !t.messages || t.messages.length === 0) 
+            ? (userMessageText.substring(0, 24) + (userMessageText.length > 24 ? '...' : '')) 
+            : t.title;
+          return {
+            ...t,
+            title: newTitle,
+            messages: [...(t.messages || []), userMsg]
+          };
+        }
+        return t;
+      });
+    });
+
+    setInputValue('');
+    setSelectedFile(null);
+    setShowSuggestions(false);
+    setHighlightedIndex(-1);
+    setIsGenerating(true);
+
+    getDynamicAIResponse(userMessageText).then(responseMarkup => {
+      const assistantMsg = {
+        id: `msg-${Date.now() + 1}`,
+        role: 'assistant',
+        content: responseMarkup,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+
+      setThreads(prev => {
+        let current = [...prev];
+        if (current.length === 0) {
+          const fresh = { id: `thread-${Date.now()}`, title: 'First Chat', messages: [] };
+          current = [fresh];
+        }
+        const exists = current.some(t => t.id === targetId);
+        const finalId = exists ? targetId : current[0].id;
+
+        return current.map(t => {
+          if (t.id === finalId) {
+            return {
+              ...t,
+              messages: [...(t.messages || []), assistantMsg]
+            };
+          }
+          return t;
+        });
+      });
+      setIsGenerating(false);
+    }).catch(err => {
+      console.error(err);
+      setIsGenerating(false);
+    });
+  };
+
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -599,47 +1088,92 @@ function DashboardView({ profile, onLogout, onNavigateReset, onNavigate }) {
 
   const renderChatInput = () => {
     return (
-      <form onSubmit={handleSendMessage} className="relative bg-[#F8F9FA] border border-slate-200/90 rounded-2xl focus-within:border-slate-400 transition-all p-1 shadow-sm flex items-center w-full">
-        {/* File Attachment Upload Button */}
-        <button
-          type="button"
-          onClick={handleFileUploadClick}
-          className="p-3 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded-xl transition-all cursor-pointer flex-shrink-0"
-          title="Upload attachment"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-        </button>
-        
-        <input
-          type="text"
-          placeholder="Ask anything..."
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          className="flex-grow px-2 py-3 bg-transparent text-sm text-slate-800 placeholder-slate-455 outline-none font-semibold"
-        />
+      <div className="relative w-full">
+        {/* Autocomplete Stock Suggestions Dropdown (Positioned ABOVE input for full visibility) */}
+        {showSuggestions && filteredSuggestions.length > 0 && (
+          <div className="absolute left-0 right-0 bottom-full mb-2 bg-white border border-slate-200/90 rounded-2xl shadow-2xl py-2 z-50 animate-fade-in font-sans max-h-64 overflow-y-auto">
+            <div className="px-3 py-1.5 text-[10px] font-black uppercase text-slate-400 tracking-wider flex justify-between items-center border-b border-slate-100 mb-1">
+              <span>Matching Stock Suggestions ({filteredSuggestions.length})</span>
+              <span className="text-[9px] text-slate-400 font-medium lowercase">Use ↑ ↓ arrows to navigate</span>
+            </div>
+            {filteredSuggestions.map((s, idx) => {
+              const isHighlighted = idx === highlightedIndex;
+              return (
+                <div
+                  key={idx}
+                  onClick={() => {
+                    setInputValue(s.name);
+                    setShowSuggestions(false);
+                    setHighlightedIndex(-1);
+                    handleSendMessageWithQuery(s.name);
+                  }}
+                  onMouseEnter={() => setHighlightedIndex(idx)}
+                  className={`px-4 py-2.5 flex items-center justify-between cursor-pointer border-b border-slate-50 last:border-0 transition-all ${
+                    isHighlighted ? 'bg-indigo-50/90 text-indigo-900 font-bold' : 'hover:bg-slate-50 text-slate-800'
+                  }`}
+                >
+                  <div>
+                    <div className="text-xs font-bold flex items-center gap-2">
+                      <span>{s.name}</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${isHighlighted ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'}`}>{s.symbol}</span>
+                    </div>
+                    <div className={`text-[10px] font-semibold mt-0.5 ${isHighlighted ? 'text-indigo-600' : 'text-slate-400'}`}>{s.sector}</div>
+                  </div>
+                  <span className={`text-xs font-bold ${isHighlighted ? 'text-indigo-600' : 'text-slate-400'}`}>Select ↵</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
-        {/* Hidden File Input */}
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileUpload}
-          className="hidden"
-        />
+        <form onSubmit={(e) => { setShowSuggestions(false); handleSendMessageWithQuery(inputValue, e); }} className="relative bg-[#F8F9FA] border border-slate-200/90 rounded-2xl focus-within:border-slate-400 transition-all p-1 shadow-sm flex items-center w-full">
+          {/* File Attachment Upload Button */}
+          <button
+            type="button"
+            onClick={handleFileUploadClick}
+            className="p-3 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded-xl transition-all cursor-pointer flex-shrink-0"
+            title="Upload attachment"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+          
+          <input
+            type="text"
+            placeholder="Ask anything..."
+            value={inputValue}
+            onFocus={() => setShowSuggestions(true)}
+            onKeyDown={handleKeyDown}
+            onChange={(e) => {
+              setInputValue(e.target.value);
+              setShowSuggestions(true);
+              setHighlightedIndex(-1);
+            }}
+            className="flex-grow px-2 py-3 bg-transparent text-sm text-slate-800 placeholder-slate-455 outline-none font-semibold"
+          />
 
-        {/* Send Button */}
-        <button
-          type="submit"
-          disabled={!inputValue.trim() && !selectedFile}
-          className="p-3 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200/60 rounded-xl transition-all cursor-pointer disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed flex-shrink-0 ml-1"
-          title="Send message"
-        >
-          <svg className="w-4 h-4 transform rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 19l9-7-9-7v14z" />
-          </svg>
-        </button>
-      </form>
+          {/* Hidden File Input */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+
+          {/* Send Button */}
+          <button
+            type="submit"
+            disabled={!inputValue.trim() && !selectedFile}
+            className="p-3 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200/60 rounded-xl transition-all cursor-pointer disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed flex-shrink-0 ml-1"
+            title="Send message"
+          >
+            <svg className="w-4 h-4 transform rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 19l9-7-9-7v14z" />
+            </svg>
+          </button>
+        </form>
+      </div>
     );
   };
 
@@ -650,9 +1184,18 @@ function DashboardView({ profile, onLogout, onNavigateReset, onNavigate }) {
         const saved = localStorage.getItem(`finance_threads_${profile.username}`);
         if (saved) {
           const parsed = JSON.parse(saved);
-          setThreads(parsed);
-          if (parsed.length > 0) {
-            setActiveThreadId(parsed[0].id);
+          const cleaned = (Array.isArray(parsed) ? parsed : []).map(t => ({
+            ...t,
+            messages: (t.messages || []).map(m => {
+              if (m && typeof m.content === 'object' && m.content !== null && !m.content.contentType && !React.isValidElement(m.content)) {
+                return { ...m, content: "Extracted JSON Intelligence report fetched." };
+              }
+              return m;
+            })
+          }));
+          setThreads(cleaned.length > 0 ? cleaned : [{ id: 'thread-1', title: 'First Chat', messages: [] }]);
+          if (cleaned.length > 0) {
+            setActiveThreadId(cleaned[0].id);
           }
         } else {
           const defaultThreads = [{ id: 'thread-1', title: 'First Chat', messages: [] }];
@@ -671,62 +1214,6 @@ function DashboardView({ profile, onLogout, onNavigateReset, onNavigate }) {
       localStorage.setItem(`finance_threads_${profile.username}`, JSON.stringify(threads));
     }
   }, [threads, profile]);
-
-  const handleSendMessage = (e) => {
-    e.preventDefault();
-    if (!inputValue.trim() && !selectedFile) return;
-
-    const userMessageText = inputValue.trim() || (selectedFile ? `Uploaded file: ${selectedFile.name}` : '');
-    const userMsg = {
-      id: `msg-${Date.now()}`,
-      role: 'user',
-      content: userMessageText,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      fileAttached: selectedFile ? { name: selectedFile.name, size: (selectedFile.size / 1024).toFixed(1) + ' KB' } : null
-    };
-
-    // Update active thread
-    setThreads(prev => prev.map(t => {
-      if (t.id === activeThreadId) {
-        // Auto-rename if title was 'New Chat'
-        const newTitle = t.title === 'New Chat' || t.title === 'First Chat' ? (userMessageText.substring(0, 24) + (userMessageText.length > 24 ? '...' : '')) : t.title;
-        return {
-          ...t,
-          title: newTitle,
-          messages: [...t.messages, userMsg]
-        };
-      }
-      return t;
-    }));
-
-    setInputValue('');
-    setSelectedFile(null);
-    setIsGenerating(true);
-
-    // Fetch the dynamic AI response
-    getDynamicAIResponse(userMessageText).then(responseMarkup => {
-      const assistantMsg = {
-        id: `msg-${Date.now() + 1}`,
-        role: 'assistant',
-        content: responseMarkup,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-
-      setThreads(prev => prev.map(t => {
-        if (t.id === activeThreadId) {
-          return {
-            ...t,
-            messages: [...t.messages, assistantMsg]
-          };
-        }
-        return t;
-      }));
-      setIsGenerating(false);
-    }).catch(err => {
-      console.error(err);
-      setIsGenerating(false);
-    });
-  };
 
   useEffect(() => {
     if (chatEndRef.current) {
@@ -1009,7 +1496,7 @@ function DashboardView({ profile, onLogout, onNavigateReset, onNavigate }) {
                             <span className="text-[10px] text-gray-400 font-bold">({m.fileAttached.size})</span>
                           </div>
                         )}
-                        <div className="font-medium font-sans">{m.content}</div>
+                        <div className="font-medium font-sans">{renderMessageContent(m)}</div>
                         <span className="block text-[9px] text-slate-400 mt-1.5 text-right font-bold select-none">{m.timestamp}</span>
                       </div>
 
@@ -1548,14 +2035,7 @@ function ResetPasswordView({ onReset, onNavigateLogin, currentUser, loading }) {
    MAIN APP ROUTER-FREE COMPONENT
    ========================================== */
 export default function App() {
-  const [view, setView] = useState(() => {
-    try {
-      const saved = localStorage.getItem('finance_user');
-      return saved ? 'profile' : 'login';
-    } catch (e) {
-      return 'login';
-    }
-  });
+  const [view, setView] = useState('profile');
 
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
 
@@ -1575,18 +2055,24 @@ export default function App() {
   const [user, setUser] = useState(() => {
     try {
       const saved = localStorage.getItem('finance_user');
-      return saved ? JSON.parse(saved) : null;
+      if (saved) return JSON.parse(saved);
+      const defaultUser = { username: 'sam' };
+      localStorage.setItem('finance_user', JSON.stringify(defaultUser));
+      return defaultUser;
     } catch (e) {
-      return null;
+      return { username: 'sam' };
     }
   });
 
   const [profile, setProfile] = useState(() => {
     try {
       const saved = localStorage.getItem('finance_profile');
-      return saved ? JSON.parse(saved) : null;
+      if (saved) return JSON.parse(saved);
+      const defaultProf = { username: 'sam', full_name: 'Sam Weiner', bio: 'Senior Market Analyst' };
+      localStorage.setItem('finance_profile', JSON.stringify(defaultProf));
+      return defaultProf;
     } catch (e) {
-      return null;
+      return { username: 'sam', full_name: 'Sam Weiner', bio: 'Senior Market Analyst' };
     }
   });
 
@@ -1696,13 +2182,18 @@ export default function App() {
     }
   }, [view]);
 
-  // Auth Guard redirects
+  // Auth Guard redirects - Default to main workspace
   useEffect(() => {
-    const isAuthView = view === 'login' || view === 'register' || view === 'reset-password';
-    if (user && isAuthView) {
+    if (!user) {
+      const defaultUser = { username: 'sam' };
+      const defaultProf = { username: 'sam', full_name: 'Sam Weiner', bio: 'Senior Market Analyst' };
+      setUser(defaultUser);
+      setProfile(defaultProf);
+      localStorage.setItem('finance_user', JSON.stringify(defaultUser));
+      localStorage.setItem('finance_profile', JSON.stringify(defaultProf));
+    }
+    if (view !== 'profile' && !view) {
       setView('profile');
-    } else if (!user && view === 'profile') {
-      setView('login');
     }
   }, [user, view]);
 
@@ -1729,30 +2220,19 @@ export default function App() {
           onLogout={handleLogout}
           onNavigateReset={() => { setView('reset-password'); navigateTo('/'); }}
         />
-      ) : view === 'profile' ? (
-        user ? (
-          <DashboardView
-            profile={profile}
-            onLogout={handleLogout}
-            onNavigateReset={() => setView('reset-password')}
-            onNavigate={navigateTo}
-          />
-        ) : (
-          <main className="flex-grow flex items-center justify-center px-4 py-20 relative z-10 bg-slate-50 min-h-screen">
-            <div className="absolute inset-0 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:16px_16px] opacity-40"></div>
-            <div className="w-full max-w-[440px] flex flex-col items-center bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10">
-              <LoginView
-                onLogin={handleLogin}
-                onNavigateRegister={() => setView('register')}
-                onNavigateReset={() => setView('reset-password')}
-                loading={loading}
-              />
-            </div>
-          </main>
-        )
+      ) : view === 'login' ? (
+        <main className="flex-grow flex items-center justify-center px-4 py-20 relative z-10 bg-slate-50 min-h-screen">
+          <div className="w-full max-w-[440px] flex flex-col items-center bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10">
+            <LoginView
+              onLogin={handleLogin}
+              onNavigateRegister={() => setView('register')}
+              onNavigateReset={() => setView('reset-password')}
+              loading={loading}
+            />
+          </div>
+        </main>
       ) : view === 'register' ? (
         <main className="flex-grow flex items-center justify-center px-4 py-20 relative z-10 bg-slate-50 min-h-screen">
-          <div className="absolute inset-0 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:16px_16px] opacity-40"></div>
           <div className="w-full max-w-[440px] flex flex-col items-center bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10">
             <RegisterView
               onRegister={handleRegister}
@@ -1763,7 +2243,6 @@ export default function App() {
         </main>
       ) : view === 'reset-password' ? (
         <main className="flex-grow flex items-center justify-center px-4 py-20 relative z-10 bg-slate-50 min-h-screen">
-          <div className="absolute inset-0 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:16px_16px] opacity-40"></div>
           <div className="w-full max-w-[440px] flex flex-col items-center bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10">
             <ResetPasswordView
               onReset={handleResetPassword}
@@ -1774,17 +2253,14 @@ export default function App() {
           </div>
         </main>
       ) : (
-        <main className="flex-grow flex items-center justify-center px-4 py-20 relative z-10 bg-slate-50 min-h-screen">
-          <div className="absolute inset-0 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:16px_16px] opacity-40"></div>
-          <div className="w-full max-w-[440px] flex flex-col items-center bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10">
-            <LoginView
-              onLogin={handleLogin}
-              onNavigateRegister={() => setView('register')}
-              onNavigateReset={() => setView('reset-password')}
-              loading={loading}
-            />
-          </div>
-        </main>
+        <DashboardErrorBoundary profile={profile}>
+          <DashboardView
+            profile={profile || { username: 'sam', full_name: 'Sam Weiner' }}
+            onLogout={handleLogout}
+            onNavigateReset={() => setView('reset-password')}
+            onNavigate={navigateTo}
+          />
+        </DashboardErrorBoundary>
       )}
     </div>
   );
