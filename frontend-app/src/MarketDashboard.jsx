@@ -288,7 +288,20 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
       const res = await axios.post(`${API_BASE_URL}/api/summarize-uploaded-pdf`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      setSelectedPdfSummary(res.data.data);
+      const summaryPayload = res.data.data;
+      setSelectedPdfSummary(summaryPayload);
+
+      // Auto Save to PostgreSQL Database
+      try {
+        await axios.post(`${API_BASE_URL}/api/save-concall-summary`, {
+          symbol: searchResult?.symbol || 'STOCK',
+          concall_period: uploadModalTarget?.concall?.date || 'Q1 FY27',
+          ppt_url: uploadModalTarget?.pptUrl || '',
+          summary_data: summaryPayload
+        });
+      } catch (saveErr) {
+        console.warn("Auto save to DB after upload failed:", saveErr);
+      }
     } catch (err) {
       const errMsg = err.response?.data?.detail || 'Could not extract text. The PDF may be image-based or scanned.';
       setSelectedPdfSummary({ loading: false, error: true, title: 'Summary Unavailable', sections: [], key_numbers: [], errorMessage: errMsg });
@@ -315,7 +328,24 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
     try {
       const response = await axios.get(`${API_BASE_URL}/api/summarize-ppt?url=${encodeURIComponent(concall.ppt)}&symbol=${encodeURIComponent(searchResult?.symbol || '')}`);
       if (response.data && response.data.data) {
-        setSelectedPdfSummary(response.data.data);
+        const summaryPayload = response.data.data;
+        setSelectedPdfSummary(summaryPayload);
+
+        // Auto Save to PostgreSQL Database across all 7 tables
+        try {
+          await axios.post(`${API_BASE_URL}/api/save-concall-summary`, {
+            symbol: searchResult?.symbol || 'STOCK',
+            concall_period: concall.date,
+            ppt_url: concall.ppt,
+            summary_data: summaryPayload
+          });
+          if (concall.ppt || concall.date) {
+            const key = concall.ppt || concall.date;
+            setSavedDbStates(prev => ({ ...prev, [key]: 'saved' }));
+          }
+        } catch (saveErr) {
+          console.warn("Auto save to DB after summarize-ppt failed:", saveErr);
+        }
       } else {
         throw new Error('Invalid response structure from backend');
       }
@@ -326,6 +356,55 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
       setSelectedPdfSummary(null);
     } finally {
       setSummaryLoading(false);
+    }
+  };
+
+  const [savedDbStates, setSavedDbStates] = useState({});
+  const [dbReportsModalOpen, setDbReportsModalOpen] = useState(false);
+  const [dbReports, setDbReports] = useState([]);
+  const [loadingDbReports, setLoadingDbReports] = useState(false);
+
+  const fetchDbReports = async () => {
+    setLoadingDbReports(true);
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/database-reports`);
+      if (res.data && res.data.reports) {
+        setDbReports(res.data.reports);
+      }
+    } catch (err) {
+      console.error("Failed to fetch database reports:", err);
+    } finally {
+      setLoadingDbReports(false);
+    }
+  };
+
+  const handleSaveToDb = async (concall) => {
+    if (!concall) return;
+    const key = concall.ppt || concall.date;
+    setSavedDbStates(prev => ({ ...prev, [key]: 'saving' }));
+    try {
+      let summaryData = selectedPdfSummary;
+      if (!summaryData && concall.ppt) {
+        try {
+          const res = await axios.get(`${API_BASE_URL}/api/summarize-ppt?url=${encodeURIComponent(concall.ppt)}&symbol=${encodeURIComponent(searchResult?.symbol || '')}`);
+          summaryData = res.data?.data;
+        } catch (e) {
+          console.warn("Direct summarize fetch failed during save, proceeding with payload:", e);
+        }
+      }
+      
+      const payload = {
+        symbol: searchResult?.symbol || 'STOCK',
+        concall_period: concall.date,
+        ppt_url: concall.ppt || '',
+        summary_data: summaryData || { period: concall.date, symbol: searchResult?.symbol, companyName: searchResult?.company_name }
+      };
+
+      await axios.post(`${API_BASE_URL}/api/save-concall-summary`, payload);
+      setSavedDbStates(prev => ({ ...prev, [key]: 'saved' }));
+    } catch (err) {
+      console.error("Save to DB failed:", err);
+      setSavedDbStates(prev => ({ ...prev, [key]: 'error' }));
     }
   };
 
@@ -1326,6 +1405,23 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                                 className="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition-all cursor-pointer shadow-md hover:shadow-lg active:scale-95"
                               >
                                 💡 AI Summary
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSaveToDb(concall)}
+                                className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shadow-md hover:shadow-lg active:scale-95 ${
+                                  savedDbStates[concall.ppt || concall.date] === 'saved'
+                                    ? 'bg-emerald-600 text-white'
+                                    : savedDbStates[concall.ppt || concall.date] === 'saving'
+                                    ? 'bg-amber-500 text-white'
+                                    : 'bg-cyan-600 hover:bg-cyan-700 text-white'
+                                }`}
+                              >
+                                {savedDbStates[concall.ppt || concall.date] === 'saved'
+                                  ? '✓ Saved to DB'
+                                  : savedDbStates[concall.ppt || concall.date] === 'saving'
+                                  ? '⏳ Saving...'
+                                  : '💾 Save to DB'}
                               </button>
                             </>
                           ) : (
