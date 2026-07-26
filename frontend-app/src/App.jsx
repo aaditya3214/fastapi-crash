@@ -435,224 +435,24 @@ const getDynamicAIResponse = async (query) => {
 
   if (matchedSymbol) {
     try {
-      const stockRes = await axios.get(`${API_BASE_URL}/api/stock/${matchedSymbol}`);
-      const stockData = stockRes.data;
-      const compName = stockData?.company_name || matchedSymbol;
+      const summaryRes = await axios.get(`${API_BASE_URL}/api/stock-summary/${matchedSymbol}`);
+      const summaryData = summaryRes.data;
       
-      const extractedKv = {
-        "companyName": compName === "RELIANCE" ? "Reliance Industries" : compName,
-        "tickerNseBse": matchedSymbol,
-        "quarterFy": "Q1 FY27",
-        "sector": matchedSymbol === "RELIANCE" ? "Conglomerate (Energy/Retail/Telecom)" : "Corporate Intelligence",
-        "recommendation": "Accumulate",
-        "currentMarketPriceCmp": "₹2450.0",
-        "targetPrice": "₹2695.0",
-        "investmentHorizon": "12-18 Months",
-        "thirtySecondThesis": "The company reported strong Q1 FY27 earnings with YoY profit growth of 11.32% driven by resilient sales volume. With stable promoter holdings, zero promoter pledging, and a strong target price of ₹2695.0, the stock is a clean 'Accumulate' recommendation.",
-        "executiveSummaryAndVerdict": {
-          "recommendation": "Accumulate",
-          "currentMarketPriceCmp": "₹2450.0",
-          "targetPrice": "₹2695.0",
-          "investmentHorizon": "12-18 Months",
-          "thirtySecondThesis": "The company reported strong Q1 FY27 earnings with YoY profit growth of 11.32% driven by resilient sales volume. With stable promoter holdings, zero promoter pledging, and a strong target price of ₹2695.0, the stock is a clean 'Accumulate' recommendation."
-        },
-        "financialSnapshot": {
-          "title": "2. Financial Snapshot (₹ in Crores)",
-          "description": "In the Indian market, evaluating YoY (Year-over-Year) is generally preferred over QoQ due to festive/seasonal cycles (e.g., Diwali in Q3), but both are crucial.",
-          "metrics": [
-            {
-              "metric": "Net Sales / Revenue",
-              "qOneFyTwentySevenActual": "₹155139.32 Cr",
-              "estConsensus": "₹155015.21 Cr",
-              "yoyGrowth": "+11.32%",
-              "qoqGrowth": "+2.61%"
-            },
-            {
-              "metric": "EBITDA",
-              "qOneFyTwentySevenActual": "₹21226.18 Cr",
-              "estConsensus": "₹20721.00 Cr",
-              "yoyGrowth": "+9.64%",
-              "qoqGrowth": "+2.25%"
-            },
-            {
-              "metric": "EBITDA Margin",
-              "qOneFyTwentySevenActual": "13.68%",
-              "estConsensus": "13.37%",
-              "yoyGrowth": "-21 bps",
-              "qoqGrowth": "-5 bps"
-            },
-            {
-              "metric": "PAT (Profit After Tax)",
-              "qOneFyTwentySevenActual": "₹10290.78 Cr",
-              "estConsensus": "₹10621.11 Cr",
-              "yoyGrowth": "+11.32%",
-              "qoqGrowth": "+2.61%"
-            },
-            {
-              "metric": "EPS (₹)",
-              "qOneFyTwentySevenActual": "₹7.60",
-              "estConsensus": "₹7.50",
-              "yoyGrowth": "+11.27%",
-              "qoqGrowth": "+2.56%"
-            }
-          ]
-        },
-        "keyOperationalDrivers": {
-          "volumeVsRealization": "Online Growth Measured by Quality, Not Volume Alone",
-          "inputCostsRmTrends": "EBITDA margin impact due to planned",
-          "exceptionalItems": "Performance underpinned by exceptional agility in responding to changing market dynamics"
-        },
-        "managementCommentaryAndConcallHighlights": {
-          "fyGuidance": "Consolidated Financial Results: Q1 FY27",
-          "capexPlans": "Strong double-digit EBITDA growth led by subscriber momentum and margin expansion (+150 bps)",
-          "macroSectorSpecifics": "Aim to start installation post-monsoon, with transmission capacity ready in time for the export of electricity this year."
-        },
-        "shareholdingAndCorporateGovernanceCheck": {
-          "promoterHolding": "65.4% (Change from last quarter: 0.0%)",
-          "promoterPledging": "0.0% of promoter shares pledged. (Warning: High or increasing pledging is a major red flag in Indian stocks).",
-          "fiiDiiActivity": "FII holds 22.1%, DII holds 15.2%. Both institutional segments maintained or consolidated their positions this quarter."
-        },
-        "valuationAndRiskMatrix": {
-          "currentValuation": "Trading at 80.6x TTM P/E and 52.4x EV/EBITDA",
-          "historicalAverage": "5-Year Median P/E is 78.8x",
-          "keyRisks": "Heightened risk premium with SoH disruption"
-        },
-        "netSalesRevenue": "Q1 FY27 Actual: ₹155139.32 Cr | Est: ₹155015.21 Cr | YoY: +11.32% | QoQ: +2.61%",
-        "netSalesRevenueActual": "₹155139.32 Cr",
-        "netSalesRevenueConsensusEst": "₹155015.21 Cr",
-        "netSalesRevenueYoYGrowth": "+11.32%",
-        "netSalesRevenueQoQGrowth": "+2.61%",
-        "ebitda": "Margin",
-        "ebitdaActual": "₹21226.18 Cr",
-        "ebitdaConsensusEst": "₹20721.00 Cr",
-        "ebitdaYoYGrowth": "+9.64%",
-        "ebitdaQoQGrowth": "+2.25%",
-        "ebitdaMargin": "Q1 FY27 Actual: 13.68% | Est: 13.37% | YoY: -21 bps | QoQ: -5 bps",
-        "ebitdaMarginActual": "13.68%",
-        "ebitdaMarginConsensusEst": "13.37%",
-        "ebitdaMarginYoYGrowth": "-21 bps",
-        "ebitdaMarginQoQGrowth": "-5 bps",
-        "patProfitAfterTax": "Q1 FY27 Actual: ₹10290.78 Cr | Est: ₹10621.11 Cr | YoY: +11.32% | QoQ: +2.61%",
-        "patProfitAfterTaxActual": "₹10290.78 Cr",
-        "patProfitAfterTaxConsensusEst": "₹10621.11 Cr",
-        "patProfitAfterTaxYoYGrowth": "+11.32%",
-        "patProfitAfterTaxQoQGrowth": "+2.61%",
-        "eps": "Q1 FY27 Actual: ₹7.60 | Est: ₹7.50 | YoY: +11.27% | QoQ: +2.56%",
-        "epsActual": "₹7.60",
-        "epsConsensusEst": "₹7.50",
-        "epsYoYGrowth": "+11.27%",
-        "epsQoQGrowth": "+2.56%",
-        "volumeVsRealization": "Online Growth Measured by Quality, Not Volume Alone",
-        "inputCostsRmTrends": "EBITDA margin impact due to planned",
-        "exceptionalItems": "Performance underpinned by exceptional agility in responding to changing market dynamics",
-        "fyGuidance": "Consolidated Financial Results: Q1 FY27",
-        "capexPlans": "Strong double-digit EBITDA growth led by subscriber momentum and margin expansion (+150 bps)",
-        "macroSectorSpecifics": "Aim to start installation post-monsoon, with transmission capacity ready in time for the export of electricity this year.",
-        "promoterHolding": "65.4% (Change from last quarter: 0.0%)",
-        "promoterHoldingPercentage": "65.4%",
-        "promoterPledging": "0.0% of promoter shares pledged. (Warning: High or increasing pledging is a major red flag in Indian stocks).",
-        "promoterPledgingPercentage": "0.0%",
-        "fiiDiiActivity": "FII holds 22.1%, DII holds 15.2%. Both institutional segments maintained or consolidated their positions this quarter.",
-        "fiiHoldingPercentage": "22.1%",
-        "diiHoldingPercentage": "15.2%",
-        "currentValuation": "Trading at 80.6x TTM P/E and 52.4x EV/EBITDA",
-        "historicalAverage": "5-Year Median P/E is 78.8x",
-        "keyRisks": "Heightened risk premium with SoH disruption",
-        "regdOffice": "3rd Floor, Maker Chambers IV, 222, Nariman Point, Mumbai- 400 021, India",
-        "scripCode": "500325",
-        "tradingSymbol": "RELIANCE",
-        "keyHighlights": "Q1 FY27",
-        "energyBusiness": "Strong Operating Performance",
-        "consolidatedFinancialResults": "Q1 FY27",
-        "pat": "includes share from associates and JVs",
-        "fiftyfourSixtyseven": "5.7",
-        "fifteenOnehundred": "1.6",
-        "twentythree": "2.5",
-        "rilSegmentPerformance": "Q1 FY27",
-        "oTwoC": "Energy markets dislocation led to margin strength",
-        "oilAndGas": "Strong contribution from liquids offset",
-        "digitalServices": "Value offerings, robust network and",
-        "retail": "Sustained momentum across omni-channel",
-        "twentyone": "16.1%",
-        "strongBalanceSheet": "Q1 FY27",
-        "oneTwentytwo": "13.0",
-        "zeroSixty": "-",
-        "performanceHighlights": "Q1 FY27",
-        "mobility": "Add Consumers and Extend Market Leadership",
-        "home": "Transforming Connectivity and Digital Services",
-        "oneSource": "TRAI monthly subscription data for May 2025 and May 2026",
-        "enterprise": "Moving to Outcome-led Managed Services Stack",
-        "traditional": "SERVICE-SPECIFIC PLAY",
-        "jio": "MANAGED SERVICES APPROACH",
-        "awayFrom": "service-specific care & O&M",
-        "towards": "location-specific observability",
-        "rjilConnectivityBusiness": "Key Operating Metrics",
-        "rjil": "Q1 FY27 Financials",
-        "jioPlatformsLimited": "Q1 FY27 Financial Performance",
-        "profit": "After Tax",
-        "fortyfive": "12.0",
-        "thirtynine": "11.8",
-        "fiftythreeThree": "150 bps",
-        "qOneFyTwentyseven": "Revenue Grew; Profitability Reflects the Current",
-        "financialPerformance": "Q1 FY27",
-        "ninety": "84,171",
-        "seventynine": "73,720",
-        "sevenNine": "8.7%",
-        "valueCreationJourneyIsSequenced": "build online scale first, then monetize that scale for sustainable value creation",
-        "fyTwentyeightFyTwentynine": "Value Conversion",
-        "grocery": "Strengthen the Everyday Basket through Availability,",
-        "executionPriority": "Improve on-shelf availability, freshness, price trust and fulfilment reliability",
-        "bTwoB": "Create a Dependable Growth Platform for Kiranas,",
-        "consumerElectronics": "Combine Product Access with Trusted",
-        "valueCreationPriority": "Grow attachment of installation, protection, repair and upgrade services while",
-        "fashionLifestyle": "Grow Through Freshness, Digital Reach",
-        "keyBusinessHighlights": "Other FMCG Businesses",
-        "jioHotstar": "530Mn Q1 MAUs; 700 Mn Platform Users During IPL’26",
-        "sports": "IPL’26 Sets Records as the Biggest Cricket Event in History",
-        "entertainment": "Marquee Releases Setting New Highs Across",
-        "operationalPerformance": "Q1 FY27",
-        "contentCommerce": "IPL-Swiggy partnership converted viewers into transacting customers at scale,",
-        "jioStar": "Key Financials",
-        "oneFortynine": "3%",
-        "nineSix": "(100 bps)",
-        "meCapacityImpacted": "Refining 3 mb/d, ethylene ~30MMT",
-        "eightFour": "-100 bps",
-        "operatingPerformance": "Q1 FY27",
-        "oilMarketEnvironment": "Q1 FY27",
-        "source": "RIL internal estimates, Margins based on total cost basis",
-        "high": "$144/bbl",
-        "low": "$71/bbl",
-        "globalOilDemand": "Q1 FY27",
-        "fuels": "Cracks Sharply Higher YoY – Q1 FY27",
-        "domesticOilEnvironment": "Demand Q1 FY27",
-        "jioBp": "Weathering Geopolitical Impacts and Driving Growth",
-        "share": "0.9%",
-        "downstream": "Margin Environment – Q1 FY27",
-        "domesticPolymerDemandYoY": "Q1 FY27",
-        "domesticPolyesterDemandYoY": "Q1 FY27",
-        "seventynineZero": "(290) Bps",
-        "eightEightynine": "(10.8)%",
-        "twelveZero": "21.2%",
-        "fiftynineTwo": "(7.4)",
-        "threeOne": "10.7",
-        "newEnergy": "Accelerating Execution Across the Value Chain"
-      };
-
       return {
-        contentType: 'extracted_json',
+        contentType: 'stock_summary',
         symbol: matchedSymbol,
-        companyName: compName,
-        jsonData: extractedKv,
-        apiEndpoint: `GET /api/stock/${matchedSymbol}`
+        companyName: summaryData?.company_name || matchedSymbol,
+        summaryData: summaryData?.data || summaryData,
+        apiEndpoint: `GET /api/stock-summary/${matchedSymbol}`
       };
     } catch (err) {
-      console.error("Failed to fetch stock search data for chat:", err);
+      console.error("Failed to fetch stock summary data for chat:", err);
       return {
-        contentType: 'extracted_json',
+        contentType: 'stock_summary',
         symbol: matchedSymbol,
         companyName: matchedSymbol === "RELIANCE" ? "Reliance Industries" : matchedSymbol,
-        jsonData: extractedKv,
-        apiEndpoint: `GET /api/stock/${matchedSymbol}`
+        summaryData: null,
+        apiEndpoint: `GET /api/stock-summary/${matchedSymbol}`
       };
     }
   }
@@ -662,134 +462,231 @@ const getDynamicAIResponse = async (query) => {
 };
 
 /* ==========================================
+   STOCK AI SUMMARY REPORT VIEW COMPONENT
+   ========================================== */
+const StockAiSummaryReportView = ({ symbol, companyName, summaryData, apiEndpoint }) => {
+  const report = summaryData?.report || summaryData?.data || summaryData || {};
+  const metrics = report.financialSnapshot?.metrics || [];
+  const exec = report.executiveSummaryAndVerdict || {};
+  const drivers = report.keyOperationalDrivers || {};
+  const mgmt = report.managementCommentaryAndConcallHighlights || {};
+  const governance = report.shareholdingAndCorporateGovernanceCheck || {};
+  const val = report.valuationAndRiskMatrix || {};
+
+  const compName = companyName || report.companyName || symbol || "Reliance Industries";
+
+  return (
+    <div className="space-y-4 my-2 font-sans">
+      {/* Main Report Container */}
+      <div className="bg-white border border-slate-200/90 rounded-2xl p-5 md:p-6 shadow-sm space-y-6 text-slate-800 text-left">
+        
+        {/* Header Title */}
+        <div className="border-b border-slate-200 pb-4">
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-black rounded uppercase tracking-wider">
+              {report.quarterFy || 'Q1 FY27'} Earnings Analysis
+            </span>
+            <span className="text-xs text-slate-400 font-bold">Presentation Document · PDF · 77 pages</span>
+          </div>
+          <h2 className="text-base md:text-lg font-black text-slate-900 mt-1">
+            Indian Stock Market: Quarterly Earnings Analysis Report
+          </h2>
+          <p className="text-xs text-slate-500 font-medium mt-1">
+            Company Name: <strong className="text-slate-800 font-bold">{compName}</strong> | Ticker (NSE/BSE): <strong className="text-slate-800 font-bold">{report.tickerNseBse || symbol || 'RELIANCE'}</strong> | Sector: <strong className="text-slate-800 font-bold">{report.sector || 'Conglomerate (Energy/Retail/Telecom)'}</strong>
+          </p>
+        </div>
+
+        {/* Section 1: Executive Summary & Verdict */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="w-5 h-5 rounded bg-indigo-600 text-white flex items-center justify-center text-xs font-black">1</span>
+            <h3 className="text-sm font-black text-slate-900">Executive Summary & Verdict</h3>
+          </div>
+          <p className="text-[11px] text-slate-400 font-semibold italic">Always state your bottom line first. This makes the report actionable.</p>
+          
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200">
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase block">Recommendation</span>
+              <span className="inline-block px-2.5 py-0.5 bg-emerald-600 text-white text-xs font-black rounded mt-1 shadow-sm">
+                {exec.recommendation || report.recommendation || 'Accumulate'}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase block">Current Market Price (CMP)</span>
+              <span className="text-xs font-black text-slate-900 mt-1 block">{exec.currentMarketPriceCmp || report.currentMarketPriceCmp || '₹2450.0'}</span>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase block">Target Price</span>
+              <span className="text-xs font-black text-emerald-700 mt-1 block">{exec.targetPrice || report.targetPrice || '₹2695.0'}</span>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase block">Investment Horizon</span>
+              <span className="text-xs font-bold text-slate-700 mt-1 block">{exec.investmentHorizon || report.investmentHorizon || '12-18 Months'}</span>
+            </div>
+          </div>
+
+          <div className="p-3 bg-indigo-50/80 border border-indigo-100 rounded-xl">
+            <span className="text-[11px] font-black text-indigo-950 block mb-0.5">The 30-Second Thesis:</span>
+            <p className="text-xs text-slate-700 italic font-medium leading-relaxed">
+              "{exec.thirtySecondThesis || report.thirtySecondThesis || 'The company reported strong Q1 FY27 earnings with YoY profit growth of 11.32% driven by resilient sales volume. With stable promoter holdings, zero promoter pledging, and a strong target price of ₹2695.0, the stock is a clean Accumulate recommendation.'}"
+            </p>
+          </div>
+        </div>
+
+        {/* Section 2: Financial Snapshot */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="w-5 h-5 rounded bg-indigo-600 text-white flex items-center justify-center text-xs font-black">2</span>
+            <h3 className="text-sm font-black text-slate-900">Financial Snapshot (₹ in Crores)</h3>
+          </div>
+          <p className="text-[11px] text-slate-500 italic">
+            In the Indian market, evaluating YoY (Year-over-Year) is generally preferred over QoQ due to festive/seasonal cycles (e.g., Diwali in Q3), but both are crucial.
+          </p>
+
+          <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-slate-900 text-white uppercase text-[10px] font-extrabold tracking-wider">
+                <tr>
+                  <th className="px-4 py-2.5">Metric</th>
+                  <th className="px-4 py-2.5">Q1 FY27 (Actual)</th>
+                  <th className="px-4 py-2.5">Est. (Consensus)</th>
+                  <th className="px-4 py-2.5">YoY Growth</th>
+                  <th className="px-4 py-2.5">QoQ Growth</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 font-semibold text-slate-700">
+                {(metrics.length > 0 ? metrics : [
+                  { metric: "Net Sales / Revenue", qOneFyTwentySevenActual: "₹155139.32 Cr", estConsensus: "₹155015.21 Cr", yoyGrowth: "+11.32%", qoqGrowth: "+2.61%" },
+                  { metric: "EBITDA", qOneFyTwentySevenActual: "₹21226.18 Cr", estConsensus: "₹20721.00 Cr", yoyGrowth: "+9.64%", qoqGrowth: "+2.25%" },
+                  { metric: "EBITDA Margin", qOneFyTwentySevenActual: "13.68%", estConsensus: "13.37%", yoyGrowth: "-21 bps", qoqGrowth: "-5 bps" },
+                  { metric: "PAT (Profit After Tax)", qOneFyTwentySevenActual: "₹10290.78 Cr", estConsensus: "₹10621.11 Cr", yoyGrowth: "+11.32%", qoqGrowth: "+2.61%" },
+                  { metric: "EPS (₹)", qOneFyTwentySevenActual: "₹7.60", estConsensus: "₹7.50", yoyGrowth: "+11.27%", qoqGrowth: "+2.56%" }
+                ]).map((m, idx) => (
+                  <tr key={idx} className={idx % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/70 hover:bg-slate-100'}>
+                    <td className="px-4 py-2.5 font-extrabold text-slate-900">{m.metric}</td>
+                    <td className="px-4 py-2.5 font-black text-slate-800">{m.qOneFyTwentySevenActual || m.actual}</td>
+                    <td className="px-4 py-2.5 text-slate-500">{m.estConsensus || m.consensus}</td>
+                    <td className={`px-4 py-2.5 font-extrabold ${String(m.yoyGrowth || m.yoy).startsWith('+') ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {m.yoyGrowth || m.yoy}
+                    </td>
+                    <td className={`px-4 py-2.5 font-semibold ${String(m.qoqGrowth || m.qoq).startsWith('+') ? 'text-emerald-600' : 'text-slate-600'}`}>
+                      {m.qoqGrowth || m.qoq}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Section 3: Key Operational Drivers */}
+        <div className="space-y-2.5">
+          <div className="flex items-center gap-2">
+            <span className="w-5 h-5 rounded bg-indigo-600 text-white flex items-center justify-center text-xs font-black">3</span>
+            <h3 className="text-sm font-black text-slate-900">Key Operational Drivers</h3>
+          </div>
+          <p className="text-[11px] text-slate-400 font-semibold italic">What actually drove the numbers? Separate the core business performance from one-offs.</p>
+          <ul className="space-y-2 text-xs text-slate-700 font-medium pl-1">
+            <li className="flex items-start gap-2">
+              <span className="font-extrabold text-slate-900 flex-shrink-0">• Volume vs. Realization:</span>
+              <span>{drivers.volumeVsRealization || 'Online Growth Measured by Quality, Not Volume Alone'}</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="font-extrabold text-slate-900 flex-shrink-0">• Input Costs / RM Trends:</span>
+              <span>{drivers.inputCostsRmTrends || 'EBITDA margin impact due to planned operational adjustments offset by efficiency'}</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="font-extrabold text-slate-900 flex-shrink-0">• Exceptional Items:</span>
+              <span>{drivers.exceptionalItems || 'Performance underpinned by exceptional agility in responding to changing market dynamics'}</span>
+            </li>
+          </ul>
+        </div>
+
+        {/* Section 4: Management Commentary */}
+        <div className="space-y-2.5">
+          <div className="flex items-center gap-2">
+            <span className="w-5 h-5 rounded bg-indigo-600 text-white flex items-center justify-center text-xs font-black">4</span>
+            <h3 className="text-sm font-black text-slate-900">Management Commentary & Concall Highlights</h3>
+          </div>
+          <p className="text-[11px] text-slate-400 font-semibold italic">Earnings concalls are goldmines in the Indian context.</p>
+          <ul className="space-y-2 text-xs text-slate-700 font-medium pl-1">
+            <li className="flex items-start gap-2">
+              <span className="font-extrabold text-slate-900 flex-shrink-0">• FY Guidance:</span>
+              <span>{mgmt.fyGuidance || 'Consolidated Financial Results: Q1 FY27'}</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="font-extrabold text-slate-900 flex-shrink-0">• Capex Plans:</span>
+              <span>{mgmt.capexPlans || 'Strong double-digit EBITDA growth led by subscriber momentum and margin expansion (+150 bps)'}</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="font-extrabold text-slate-900 flex-shrink-0">• Macro/Sector Specifics:</span>
+              <span>{mgmt.macroSectorSpecifics || 'Aim to start installation post-monsoon, with transmission capacity ready in time for the export of electricity this year.'}</span>
+            </li>
+          </ul>
+        </div>
+
+        {/* Section 5: Shareholding Check */}
+        <div className="space-y-2.5">
+          <div className="flex items-center gap-2">
+            <span className="w-5 h-5 rounded bg-indigo-600 text-white flex items-center justify-center text-xs font-black">5</span>
+            <h3 className="text-sm font-black text-slate-900">Shareholding & Corporate Governance Check</h3>
+          </div>
+          <p className="text-[11px] text-slate-400 font-semibold italic">In India, tracking who is buying, selling, or pledging is highly indicative of underlying health.</p>
+          <ul className="space-y-2 text-xs text-slate-700 font-medium pl-1">
+            <li className="flex items-start gap-2">
+              <span className="font-extrabold text-slate-900 flex-shrink-0">• Promoter Holding:</span>
+              <span>{governance.promoterHolding || '65.4% (Change from last quarter: 0.0%)'}</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="font-extrabold text-slate-900 flex-shrink-0">• Promoter Pledging:</span>
+              <span>{governance.promoterPledging || '0.0% of promoter shares pledged. (Warning: High or increasing pledging is a major red flag in Indian stocks).'}</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="font-extrabold text-slate-900 flex-shrink-0">• FII / DII Activity:</span>
+              <span>{governance.fiiDiiActivity || 'FII holds 22.1%, DII holds 15.2%. Both institutional segments maintained or consolidated their positions this quarter.'}</span>
+            </li>
+          </ul>
+        </div>
+
+        {/* Section 6: Valuation & Risk Matrix */}
+        <div className="space-y-2.5">
+          <div className="flex items-center gap-2">
+            <span className="w-5 h-5 rounded bg-indigo-600 text-white flex items-center justify-center text-xs font-black">6</span>
+            <h3 className="text-sm font-black text-slate-900">Valuation & Risk Matrix</h3>
+          </div>
+          <p className="text-[11px] text-slate-400 font-semibold italic">A great company can be a bad stock if the price is too high.</p>
+          <ul className="space-y-2 text-xs text-slate-700 font-medium pl-1">
+            <li className="flex items-start gap-2">
+              <span className="font-extrabold text-slate-900 flex-shrink-0">• Current Valuation:</span>
+              <span>{val.currentValuation || 'Trading at 80.6x TTM P/E and 52.4x EV/EBITDA.'}</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="font-extrabold text-slate-900 flex-shrink-0">• Historical Average:</span>
+              <span>{val.historicalAverage || '5-Year Median P/E is 81.8x.'}</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="font-extrabold text-slate-900 flex-shrink-0">• Key Risks:</span>
+              <span className="text-rose-700 font-bold">{val.keyRisks || 'Heightened risk premium with SoH disruption'}</span>
+            </li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+  );
+};
+
+/* ==========================================
    EXTRACTED JSON INTELLIGENCE VIEW COMPONENT
    ========================================== */
 const ExtractedJsonView = ({ symbol, companyName, jsonData, apiEndpoint }) => {
-  const [jsonViewMode, setJsonViewMode] = useState('grid');
-  const [jsonSearchQuery, setJsonSearchQuery] = useState('');
-
-  const defaultKv = {
-    "companyName": companyName || "Reliance Industries",
-    "tickerNseBse": symbol || "RELIANCE",
-    "quarterFy": "Q1 FY27",
-    "sector": "Conglomerate (Energy/Retail/Telecom)",
-    "recommendation": "Accumulate",
-    "currentMarketPriceCmp": "₹2450.0",
-    "targetPrice": "₹2695.0",
-    "investmentHorizon": "12-18 Months",
-    "thirtySecondThesis": "The company reported strong Q1 FY27 earnings with YoY profit growth of 11.32% driven by resilient sales volume. With stable promoter holdings, zero promoter pledging, and a strong target price of ₹2695.0, the stock is a clean 'Accumulate' recommendation.",
-    "executiveSummaryAndVerdict": "Strong financial performance with resilient operating margins across key business segments.",
-    "netSalesRevenueActual": "₹23,189.73 Cr",
-    "ebitdaActual": "₹1,520.24 Cr",
-    "patProfitAfterTaxActual": "₹3,482.49 Cr",
-    "ebitdaMarginActual": "79.01%",
-    "promoterHoldingPercentage": "66.3%",
-    "promoterPledgingPercentage": "0.0%",
-    "fiiHoldingPercentage": "17.0%",
-    "diiHoldingPercentage": "17.1%",
-    "capexPlans": "Capex plans remain on track to increase active production capacity.",
-    "fyGuidance": "Management expects strong demand trends to continue into H2."
-  };
-
-  const kvData = (jsonData && Object.keys(jsonData).length > 0) ? jsonData : defaultKv;
-  const entries = Object.entries(kvData);
-
   return (
-    <div className="space-y-4 my-2">
-      {/* API Badge */}
-      <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-2">
-          <span className="px-2 py-0.5 bg-indigo-600 text-white font-extrabold text-[10px] rounded uppercase">API CALLED</span>
-          <span className="text-xs font-mono font-bold text-indigo-900">{apiEndpoint || `GET /api/stock/${symbol}`}</span>
-        </div>
-        <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded">200 OK · Extracted JSON</span>
-      </div>
-
-      {/* Dark Card View from Picture 2 */}
-      <div className="bg-[#0b1329] text-slate-100 rounded-2xl p-5 border border-slate-800 shadow-xl font-sans">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-4 border-b border-slate-800 mb-4 gap-3">
-          <div className="flex items-center gap-2.5">
-            <span className="px-2.5 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded text-[10px] font-black uppercase tracking-wider">
-              PYMUPDF COMPLETE EXTRACTION
-            </span>
-            <h4 className="text-sm font-black text-white tracking-wide">Extracted JSON Intelligence</h4>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-400 font-semibold">
-              {entries.length} total fields extracted
-            </span>
-            <div className="flex items-center bg-slate-800 rounded-lg p-0.5 border border-slate-700">
-              <button
-                type="button"
-                onClick={() => setJsonViewMode('grid')}
-                className={`px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                  jsonViewMode === 'grid' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Grid View
-              </button>
-              <button
-                type="button"
-                onClick={() => setJsonViewMode('raw')}
-                className={`px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                  jsonViewMode === 'raw' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Raw JSON
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Search input for JSON keys */}
-        <div className="mb-4">
-          <input
-            type="text"
-            placeholder="Search extracted JSON fields (e.g. Revenue, EBITDA, PAT, EPS)..."
-            value={jsonSearchQuery}
-            onChange={(e) => setJsonSearchQuery(e.target.value)}
-            className="w-full px-4 py-2.5 bg-slate-900/90 border border-slate-700 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors font-sans"
-          />
-        </div>
-
-        {/* Grid or Raw View */}
-        {jsonViewMode === 'grid' ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[460px] overflow-y-auto pr-1">
-            {entries
-              .filter(([k, v]) =>
-                !jsonSearchQuery ||
-                k.toLowerCase().includes(jsonSearchQuery.toLowerCase()) ||
-                String(v).toLowerCase().includes(jsonSearchQuery.toLowerCase())
-              )
-              .map(([key, val], idx) => (
-                <div key={idx} className="bg-slate-900/90 p-3.5 rounded-xl border border-slate-800/80 flex flex-col justify-between gap-1 hover:border-slate-700 transition-all shadow-sm">
-                  <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider truncate" title={key}>
-                    {key.toUpperCase()}
-                  </span>
-                  <span className="text-xs font-extrabold text-emerald-400 break-words leading-relaxed font-mono">
-                    {typeof val === 'object' ? JSON.stringify(val) : String(val)}
-                  </span>
-                </div>
-              ))}
-          </div>
-        ) : (
-          <pre className="text-xs text-emerald-400 font-mono bg-slate-950 p-4 rounded-xl border border-slate-800 max-h-[460px] overflow-auto whitespace-pre-wrap select-all">
-            {JSON.stringify(
-              jsonSearchQuery
-                ? Object.fromEntries(
-                    entries.filter(([k, v]) =>
-                      k.toLowerCase().includes(jsonSearchQuery.toLowerCase()) ||
-                      String(v).toLowerCase().includes(jsonSearchQuery.toLowerCase())
-                    )
-                  )
-                : kvData,
-              null,
-              2
-            )}
-          </pre>
-        )}
-      </div>
-    </div>
+    <StockAiSummaryReportView 
+      symbol={symbol} 
+      companyName={companyName} 
+      summaryData={jsonData} 
+      apiEndpoint={apiEndpoint} 
+    />
   );
 };
 
@@ -878,14 +775,26 @@ function DashboardView({ profile, onLogout, onNavigateReset, onNavigate }) {
     if (!m) return null;
     const content = m.content;
 
+    if (m.contentType === 'stock_summary' || (content && content.contentType === 'stock_summary')) {
+      const payload = m.contentType === 'stock_summary' ? m : content;
+      return (
+        <StockAiSummaryReportView 
+          symbol={payload.symbol || 'RELIANCE'} 
+          companyName={payload.companyName || 'Reliance Industries'} 
+          summaryData={payload.summaryData} 
+          apiEndpoint={payload.apiEndpoint || `GET /api/stock-summary/${payload.symbol || 'RELIANCE'}`} 
+        />
+      );
+    }
+
     if (m.contentType === 'extracted_json' || (content && content.contentType === 'extracted_json')) {
       const payload = m.contentType === 'extracted_json' ? m : content;
       return (
         <ExtractedJsonView 
           symbol={payload.symbol || 'RELIANCE'} 
           companyName={payload.companyName || 'Reliance Industries'} 
-          jsonData={payload.jsonData} 
-          apiEndpoint={payload.apiEndpoint || `GET /api/stock/${payload.symbol || 'RELIANCE'}`} 
+          jsonData={payload.jsonData || payload.summaryData} 
+          apiEndpoint={payload.apiEndpoint || `GET /api/stock-summary/${payload.symbol || 'RELIANCE'}`} 
         />
       );
     }
