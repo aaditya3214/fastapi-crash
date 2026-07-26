@@ -1,11 +1,13 @@
 # pyrefly: ignore [missing-import]
 from contextlib import asynccontextmanager
 # pyrefly: ignore [missing-import]
-from fastapi import Depends, FastAPI, File, HTTPException, status, Request, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, status, Request, UploadFile, Response
 # pyrefly: ignore [missing-import]
 from fastapi.responses import JSONResponse
 # pyrefly: ignore [missing-import]
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import Any
 # pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Session
 # pyrefly: ignore [missing-import]
@@ -1363,28 +1365,42 @@ SECTORS = {
     "TRENT": "Retail & Fashion",
 }
 
-def build_earnings_analysis_report(text: str, filename: str, db: Session) -> dict:
+def build_earnings_analysis_report(text: str, filename: str, db: Session, target_symbol: str | None = None) -> dict:
     import re
     import random
     import hashlib
 
     # 1. Resolve stock and quarter
+    search_str = (filename + " " + text[:5000]).upper()
     stocks = db.query(models.Stock).all()
     matched_stock = None
-    search_str = (filename + " " + text[:5000]).upper()
-    for s in stocks:
-        if s.symbol.upper() in filename.upper() or f" {s.symbol.upper()} " in search_str or s.name.upper() in search_str:
-            matched_stock = s
-            break
+
+    if target_symbol and target_symbol.strip():
+        sym_clean = target_symbol.strip().upper()
+        for s in stocks:
+            if s.symbol.upper() == sym_clean:
+                matched_stock = s
+                break
+
+    if not matched_stock:
+        for s in stocks:
+            if s.symbol.upper() in filename.upper() or s.symbol.upper() in search_str or s.name.upper() in search_str:
+                matched_stock = s
+                break
 
     if matched_stock:
         symbol = matched_stock.symbol
         company_name = matched_stock.name
+    elif target_symbol and target_symbol.strip():
+        symbol = target_symbol.strip().upper()
+        company_name = target_symbol.strip().upper()
     else:
-        symbol = "RELIANCE"
-        company_name = "Reliance Industries"
+        # Fallback if completely unknown
+        symbol = "STOCK"
+        company_name = "Corporate Analysis"
 
     sector = SECTORS.get(symbol, "Conglomerate")
+
 
     # Detect Quarter
     quarter = "Q1 FY27"
@@ -1760,11 +1776,116 @@ def build_earnings_analysis_report(text: str, filename: str, db: Session) -> dic
     }
 
 
+def extract_pymupdf_json_data(file_bytes: bytes) -> dict:
+    """
+    Use PyMuPDF (fitz) to perform high-performance structured data extraction,
+    returning JSON key-value pairs, metadata, table objects, and block layout summaries.
+    """
+    import fitz  # PyMuPDF
+    import re
+
+    extracted_dict = {
+        "metadata": {},
+        "key_value_pairs": {},
+        "tables": [],
+        "page_summaries": []
+    }
+
+    try:
+        doc = fitz.open(stream=file_bytes, filetype="pdf")
+        extracted_dict["metadata"] = {
+            "page_count": len(doc),
+            "format": doc.name or "PDF",
+            "info": {k: str(v) for k, v in doc.metadata.items() if v} if doc.metadata else {}
+        }
+
+        kv_pairs = {}
+        tables_list = []
+        page_summaries = []
+
+        # Common financial metric key patterns
+        financial_metric_pattern = re.compile(
+            r'^(Net Sales|Revenue|EBITDA|EBITDA Margin|PAT|Profit|EPS|Operating Margin|Gross Profit|Debt|Cash|CMP|Target Price|Recommendation)\b[:\-\s]+(.+)$',
+            re.IGNORECASE
+        )
+
+        for page_num, page in enumerate(doc, 1):
+            page_dict = page.get_text("dict")
+            page_text = page.get_text("text")
+
+            # 1. Line-by-line parsing for explicit colons, equals, or financial patterns
+            for line_raw in page_text.splitlines():
+                line_text = line_raw.strip()
+                if not line_text:
+                    continue
+
+                if ":" in line_text:
+                    parts = line_text.split(":", 1)
+                    k, v = parts[0].strip(), parts[1].strip()
+                    if 2 <= len(k) <= 60 and v and len(v) <= 100:
+                        kv_pairs[k] = v
+                elif "=" in line_text:
+                    parts = line_text.split("=", 1)
+                    k, v = parts[0].strip(), parts[1].strip()
+                    if 2 <= len(k) <= 60 and v and len(v) <= 100:
+                        kv_pairs[k] = v
+                else:
+                    m = financial_metric_pattern.search(line_text)
+                    if m:
+                        k, v = m.group(1).strip(), m.group(2).strip()
+                        if k and v:
+                            kv_pairs[k] = v
+
+            # 2. PyMuPDF High-Performance Table Detection & Extraction
+            try:
+                tabs = page.find_tables()
+                if tabs and tabs.tables:
+                    for t_idx, tab in enumerate(tabs.tables, 1):
+                        extracted_table = tab.extract()
+                        if extracted_table:
+                            headers = [str(h or "").strip() for h in extracted_table[0]]
+                            rows = [[str(cell or "").strip() for cell in row] for row in extracted_table[1:]]
+                            tables_list.append({
+                                "page": page_num,
+                                "table_id": t_idx,
+                                "headers": headers,
+                                "rows": rows[:15]
+                            })
+
+                            # Populate key-value pairs from 2-column or 3-column financial tables
+                            for row in rows:
+                                non_empty = [c for c in row if c]
+                                if len(non_empty) >= 2:
+                                    k_candidate = non_empty[0]
+                                    v_candidate = non_empty[1]
+                                    if 2 <= len(k_candidate) <= 50 and v_candidate and k_candidate not in kv_pairs:
+                                        kv_pairs[k_candidate] = v_candidate
+            except Exception:
+                pass
+
+            page_summaries.append({
+                "page": page_num,
+                "block_count": len(page_dict.get("blocks", [])),
+            })
+
+        doc.close()
+        extracted_dict["key_value_pairs"] = kv_pairs
+        extracted_dict["tables"] = tables_list
+        extracted_dict["page_summaries"] = page_summaries
+
+    except Exception as e:
+        extracted_dict["error"] = f"PyMuPDF JSON extraction error: {str(e)}"
+
+    return extracted_dict
+
+
+
 @app.post("/api/summarize-uploaded-pdf")
 async def summarize_uploaded_pdf(file: UploadFile = File(...), db: Session = Depends(get_db)):
     """
     Accept a user-uploaded PDF or PPTX file and return a deeply structured,
     investment-grade AI summary styled as a Quarterly Earnings Analysis Report.
+    Includes PyMuPDF extracted JSON key-value pairs.
     """
     import io
     import re
@@ -1800,23 +1921,33 @@ async def summarize_uploaded_pdf(file: UploadFile = File(...), db: Session = Dep
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to parse PPTX: {e}")
     else:
+        # High-performance PDF Extraction via PyMuPDF (fitz), with pdfplumber & PyPDF2 fallbacks
         try:
-            import pdfplumber
-            with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-                for page_num, page in enumerate(pdf.pages, 1):
-                    text = page.extract_text()
-                    if text and text.strip():
-                        all_text.append(f"[Page {page_num}]\n{text.strip()}")
+            import fitz  # PyMuPDF
+            doc = fitz.open(stream=file_bytes, filetype="pdf")
+            for page_num, page in enumerate(doc, 1):
+                text = page.get_text("text")
+                if text and text.strip():
+                    all_text.append(f"[Page {page_num}]\n{text.strip()}")
+            doc.close()
         except Exception:
             try:
-                import PyPDF2
-                reader = PyPDF2.PdfReader(io.BytesIO(file_bytes))
-                for page_num, page in enumerate(reader.pages, 1):
-                    text = page.extract_text()
-                    if text and text.strip():
-                        all_text.append(f"[Page {page_num}]\n{text.strip()}")
-            except Exception as e2:
-                raise HTTPException(status_code=500, detail=f"Failed to extract text: {e2}")
+                import pdfplumber
+                with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+                    for page_num, page in enumerate(pdf.pages, 1):
+                        text = page.extract_text()
+                        if text and text.strip():
+                            all_text.append(f"[Page {page_num}]\n{text.strip()}")
+            except Exception:
+                try:
+                    import PyPDF2
+                    reader = PyPDF2.PdfReader(io.BytesIO(file_bytes))
+                    for page_num, page in enumerate(reader.pages, 1):
+                        text = page.extract_text()
+                        if text and text.strip():
+                            all_text.append(f"[Page {page_num}]\n{text.strip()}")
+                except Exception as e2:
+                    raise HTTPException(status_code=500, detail=f"Failed to extract text: {e2}")
 
     if not all_text:
         raise HTTPException(
@@ -1858,6 +1989,9 @@ async def summarize_uploaded_pdf(file: UploadFile = File(...), db: Session = Dep
     key_nums = extract_numbers(full_text[:10000])
     report_data = build_earnings_analysis_report(full_text, file.filename or "Uploaded", db)
 
+    # PyMuPDF structured JSON key-value extraction
+    pymupdf_json_data = extract_pymupdf_json_data(file_bytes) if file_ext == "pdf" else {}
+
     return {
         "status": "success",
         "data": {
@@ -1868,6 +2002,8 @@ async def summarize_uploaded_pdf(file: UploadFile = File(...), db: Session = Dep
             "key_numbers": key_nums,
             "sections": report_data["sections"],
             "markdown_report": report_data["markdown_report"],
+            "pymupdf_json_data": pymupdf_json_data,
+            "key_value_pairs": pymupdf_json_data.get("key_value_pairs", {}),
             "is_earnings_report": True,
             "source": "uploaded_file",
             "total_lines_extracted": len(unique_lines)
@@ -1875,8 +2011,9 @@ async def summarize_uploaded_pdf(file: UploadFile = File(...), db: Session = Dep
     }
 
 
+
 @app.get("/api/summarize-ppt")
-def summarize_ppt(url: str, db: Session = Depends(get_db)):
+def summarize_ppt(url: str, symbol: str | None = None, db: Session = Depends(get_db)):
     """
     Download a PPT/PPTX/PDF from a URL, extract all text, and return a structured
     AI-generated summary based on the actual document contents.
@@ -1946,24 +2083,34 @@ def summarize_ppt(url: str, db: Session = Depends(get_db)):
             raise HTTPException(status_code=500, detail=f"Failed to parse PPTX: {str(e)}")
 
     elif file_ext == "pdf":
+        # High-performance PDF Extraction via PyMuPDF (fitz)
         try:
-            import pdfplumber
-            with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-                for page_num, page in enumerate(pdf.pages, 1):
-                    text = page.extract_text()
-                    if text and text.strip():
-                        all_text.append(f"[Page {page_num}]\n{text.strip()}")
-        except Exception as e:
-            # Fallback: try PyPDF2
+            import fitz  # PyMuPDF
+            doc = fitz.open(stream=file_bytes, filetype="pdf")
+            for page_num, page in enumerate(doc, 1):
+                text = page.get_text("text")
+                if text and text.strip():
+                    all_text.append(f"[Page {page_num}]\n{text.strip()}")
+            doc.close()
+        except Exception:
             try:
-                import PyPDF2
-                reader = PyPDF2.PdfReader(io.BytesIO(file_bytes))
-                for page_num, page in enumerate(reader.pages, 1):
-                    text = page.extract_text()
-                    if text and text.strip():
-                        all_text.append(f"[Page {page_num}]\n{text.strip()}")
-            except Exception as e2:
-                raise HTTPException(status_code=500, detail=f"Failed to parse PDF: {str(e)} / {str(e2)}")
+                import pdfplumber
+                with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+                    for page_num, page in enumerate(pdf.pages, 1):
+                        text = page.extract_text()
+                        if text and text.strip():
+                            all_text.append(f"[Page {page_num}]\n{text.strip()}")
+            except Exception as e:
+                # Fallback: try PyPDF2
+                try:
+                    import PyPDF2
+                    reader = PyPDF2.PdfReader(io.BytesIO(file_bytes))
+                    for page_num, page in enumerate(reader.pages, 1):
+                        text = page.extract_text()
+                        if text and text.strip():
+                            all_text.append(f"[Page {page_num}]\n{text.strip()}")
+                except Exception as e2:
+                    raise HTTPException(status_code=500, detail=f"Failed to parse PDF: {str(e)} / {str(e2)}")
     else:
         raise HTTPException(status_code=400, detail="Unsupported file type. Only PDF and PPTX are supported.")
 
@@ -1997,7 +2144,10 @@ def summarize_ppt(url: str, db: Session = Depends(get_db)):
             seen.add(line)
             unique_lines.append(line)
 
-    report_data = build_earnings_analysis_report(full_text, url, db)
+    report_data = build_earnings_analysis_report(full_text, url, db, target_symbol=symbol)
+    pymupdf_json_data = extract_pymupdf_json_data(file_bytes) if file_ext == "pdf" else {}
+
+    pymupdf_json_data = extract_pymupdf_json_data(file_bytes) if file_ext == "pdf" else {}
 
     return {
         "status": "success",
@@ -2008,12 +2158,229 @@ def summarize_ppt(url: str, db: Session = Depends(get_db)):
             "key_numbers": extract_numbers(full_text[:5000])[:10],
             "sections": report_data["sections"],
             "markdown_report": report_data["markdown_report"],
+            "pymupdf_json_data": pymupdf_json_data,
+            "key_value_pairs": pymupdf_json_data.get("key_value_pairs", {}),
             "is_earnings_report": True
         }
     }
 
 
+
+class ExportPdfRequest(BaseModel):
+    title: str
+    markdown_report: str | None = None
+    key_value_pairs: dict[str, Any] | None = None
+    filename: str | None = None
+
+
+@app.post("/api/export-summary-pdf")
+def export_summary_pdf(req: ExportPdfRequest):
+    """
+    Generate and stream a professional ReportLab PDF file containing 
+    the extracted document report & PyMuPDF JSON key-value pairs.
+    """
+    import re
+    import html
+    from reportlab.lib.pagesizes import letter
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib import colors
+    import io
+
+    def sanitize_text(text: str) -> str:
+        if not text:
+            return ""
+        # Replace Rupee symbol ₹ with 'Rs. ' to prevent Helvetica font black box (⬛) errors
+        cleaned = text.replace("₹", "Rs. ")
+        # Convert markdown bold **text** to ReportLab <b>text</b>
+        cleaned = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', cleaned)
+        # Convert markdown italic *text* to ReportLab <i>text</i>
+        cleaned = re.sub(r'\*(.*?)\*', r'<i>\1</i>', cleaned)
+        # Clean any remaining non-ASCII glyphs or unprintable control characters
+        cleaned = re.sub(r'[^\x00-\x7F\u2000-\u206F]+', '', cleaned)
+        return cleaned
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle(
+        'DocTitle',
+        parent=styles['Heading1'],
+        fontSize=15,
+        leading=19,
+        textColor=colors.HexColor('#0F172A'),
+        spaceAfter=10
+    )
+    
+    body_style = ParagraphStyle(
+        'DocBody',
+        parent=styles['Normal'],
+        fontSize=9.5,
+        leading=13.5,
+        textColor=colors.HexColor('#334155'),
+        spaceAfter=6
+    )
+    
+    bold_style = ParagraphStyle(
+        'DocBold',
+        parent=styles['Normal'],
+        fontSize=10,
+        leading=14,
+        fontName='Helvetica-Bold',
+        textColor=colors.HexColor('#0F172A'),
+        spaceBefore=6,
+        spaceAfter=4
+    )
+
+    th_style = ParagraphStyle(
+        'TableHeader',
+        parent=styles['Normal'],
+        fontSize=8.5,
+        leading=11,
+        fontName='Helvetica-Bold',
+        textColor=colors.white
+    )
+
+    td_style = ParagraphStyle(
+        'TableCell',
+        parent=styles['Normal'],
+        fontSize=8.5,
+        leading=11,
+        textColor=colors.HexColor('#334155')
+    )
+
+    story = []
+    clean_title = sanitize_text(req.title)
+    story.append(Paragraph(f"<b>{clean_title}</b>", title_style))
+    story.append(Paragraph("<b>Source:</b> Sourced & Summarized via Stock Analytics AI (PyMuPDF High-Performance Engine)", body_style))
+    story.append(Spacer(1, 10))
+
+    if req.markdown_report:
+        lines = req.markdown_report.split('\n')
+        i = 0
+        while i < len(lines):
+            line_str = lines[i].strip()
+            if not line_str:
+                story.append(Spacer(1, 3))
+                i += 1
+                continue
+
+            # Check if this line starts and ends with '|' (markdown table row)
+            if line_str.startswith('|') and line_str.endswith('|'):
+                table_block = []
+                while i < len(lines) and lines[i].strip().startswith('|') and lines[i].strip().endswith('|'):
+                    table_block.append(lines[i].strip())
+                    i += 1
+
+                # Parse table_block into rows & columns
+                parsed_table_rows = []
+                for row_line in table_block:
+                    cells = [c.strip() for c in row_line.split('|')[1:-1]]
+                    # Ignore separator rows like | :--- | :--- |
+                    if all(re.match(r'^[:\- ]+$', cell) for cell in cells if cell):
+                        continue
+                    parsed_table_rows.append(cells)
+
+                if parsed_table_rows:
+                    num_cols = max(len(row) for row in parsed_table_rows)
+                    if num_cols > 0:
+                        total_table_width = 520
+                        col_width = total_table_width / num_cols
+                        col_widths = [col_width] * num_cols
+
+                        # Distribute widths: first column wider for Metric names
+                        if num_cols >= 3:
+                            col_widths[0] = 160
+                            rem_width = (total_table_width - 160) / (num_cols - 1)
+                            for c_idx in range(1, num_cols):
+                                col_widths[c_idx] = rem_width
+
+                        formatted_table_data = []
+                        for r_idx, row in enumerate(parsed_table_rows):
+                            row_cells = []
+                            while len(row) < num_cols:
+                                row.append("")
+                            for cell in row:
+                                clean_c = sanitize_text(cell)
+                                cell_style = th_style if r_idx == 0 else td_style
+                                row_cells.append(Paragraph(clean_c, cell_style))
+                            formatted_table_data.append(row_cells)
+
+                        t_table = Table(formatted_table_data, colWidths=col_widths)
+                        t_table.setStyle(TableStyle([
+                            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0F172A')),
+                            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+                            ('TOPPADDING', (0, 0), (-1, -1), 5),
+                            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+                            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
+                            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FAFC')])
+                        ]))
+                        story.append(Spacer(1, 4))
+                        story.append(t_table)
+                        story.append(Spacer(1, 6))
+                continue
+
+            clean_line = sanitize_text(line_str)
+            if clean_line.startswith('#'):
+                clean_h = clean_line.lstrip('#').strip()
+                story.append(Paragraph(f"<b>{clean_h}</b>", bold_style))
+            elif clean_line.startswith('-') or clean_line.startswith('*'):
+                clean_b = clean_line.lstrip('-*').strip()
+                story.append(Paragraph(f"• {clean_b}", body_style))
+            else:
+                story.append(Paragraph(clean_line, body_style))
+            i += 1
+
+
+    if req.key_value_pairs and len(req.key_value_pairs) > 0:
+        story.append(Spacer(1, 12))
+        story.append(Paragraph("<b>PyMuPDF Extracted Key-Value JSON Data</b>", bold_style))
+        story.append(Spacer(1, 6))
+
+        table_data = [["Extracted Parameter", "Value"]]
+        for k, v in req.key_value_pairs.items():
+            clean_k = sanitize_text(str(k))
+            clean_v = sanitize_text(str(v))
+            table_data.append([clean_k[:45], clean_v[:65]])
+
+        t = Table(table_data, colWidths=[240, 280])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0F172A')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8.5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FAFC')])
+        ]))
+        story.append(t)
+
+    doc.build(story)
+    buffer.seek(0)
+
+    raw_filename = req.filename or req.title or "Extracted_Report"
+    clean_name = raw_filename.replace(" ", "_")
+    if not clean_name.endswith(".pdf"):
+        clean_name += ".pdf"
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{clean_name}"'
+        }
+    )
+
+
+
 @app.get("/api/download-file")
+
 @app.get("/api/download-file/{filename}")
 def download_file(url: str, filename: str = None):
     """
