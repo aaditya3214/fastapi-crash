@@ -846,6 +846,19 @@ function DashboardView({ profile, onLogout, onNavigateReset, onNavigate }) {
 
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const searchContainerRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const STOCK_SUGGESTIONS = [
     { symbol: 'RELIANCE', name: 'Reliance Industries Limited', sector: 'Conglomerate (Energy/Retail/Telecom)' },
@@ -893,12 +906,6 @@ function DashboardView({ profile, onLogout, onNavigateReset, onNavigate }) {
       setInputValue(selected.name);
       setShowSuggestions(false);
       setHighlightedIndex(-1);
-
-      // Trigger message submit directly with selected suggestion text
-      setTimeout(() => {
-        const fakeEvent = { preventDefault: () => {} };
-        handleSendMessageWithQuery(selected.name, fakeEvent);
-      }, 50);
     } else if (e.key === 'Escape') {
       setShowSuggestions(false);
       setHighlightedIndex(-1);
@@ -997,11 +1004,11 @@ function DashboardView({ profile, onLogout, onNavigateReset, onNavigate }) {
 
   const renderChatInput = () => {
     return (
-      <div className="relative w-full">
+      <div ref={searchContainerRef} className="relative w-full">
         {/* Autocomplete Stock Suggestions Dropdown (Positioned ABOVE input for full visibility) */}
         {showSuggestions && filteredSuggestions.length > 0 && (
-          <div className="absolute left-0 right-0 bottom-full mb-2 bg-white border border-slate-200/90 rounded-2xl shadow-2xl py-2 z-50 animate-fade-in font-sans max-h-64 overflow-y-auto">
-            <div className="px-3 py-1.5 text-[10px] font-black uppercase text-slate-400 tracking-wider flex justify-between items-center border-b border-slate-100 mb-1">
+          <div className="absolute left-0 right-0 bottom-full mb-2 bg-white border border-slate-200/90 rounded-2xl shadow-2xl py-2 z-50 animate-fade-in font-sans max-h-64 overflow-y-auto overflow-x-hidden custom-scrollbar-light">
+            <div className="px-4 py-2 text-[10px] font-black uppercase text-slate-400 tracking-wider flex justify-between items-center border-b border-slate-100 mb-1">
               <span>Matching Stock Suggestions ({filteredSuggestions.length})</span>
               <span className="text-[9px] text-slate-400 font-medium lowercase">Use ↑ ↓ arrows to navigate</span>
             </div>
@@ -1014,21 +1021,22 @@ function DashboardView({ profile, onLogout, onNavigateReset, onNavigate }) {
                     setInputValue(s.name);
                     setShowSuggestions(false);
                     setHighlightedIndex(-1);
-                    handleSendMessageWithQuery(s.name);
                   }}
                   onMouseEnter={() => setHighlightedIndex(idx)}
-                  className={`px-4 py-2.5 flex items-center justify-between cursor-pointer border-b border-slate-50 last:border-0 transition-all ${
-                    isHighlighted ? 'bg-indigo-50/90 text-indigo-900 font-bold' : 'hover:bg-slate-50 text-slate-800'
+                  className={`px-4 py-2.5 flex items-center justify-between cursor-pointer border-b border-slate-50 last:border-0 transition-all duration-200 ease-out transform ${
+                    isHighlighted
+                      ? 'bg-indigo-50/90 text-indigo-900 font-bold translate-x-1.5'
+                      : 'hover:bg-slate-50 text-slate-800 hover:translate-x-1.5'
                   }`}
                 >
-                  <div>
+                  <div className="transition-transform duration-200">
                     <div className="text-xs font-bold flex items-center gap-2">
                       <span>{s.name}</span>
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${isHighlighted ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'}`}>{s.symbol}</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors ${isHighlighted ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'}`}>{s.symbol}</span>
                     </div>
-                    <div className={`text-[10px] font-semibold mt-0.5 ${isHighlighted ? 'text-indigo-600' : 'text-slate-400'}`}>{s.sector}</div>
+                    <div className={`text-[10px] font-semibold mt-0.5 transition-colors ${isHighlighted ? 'text-indigo-600' : 'text-slate-400'}`}>{s.sector}</div>
                   </div>
-                  <span className={`text-xs font-bold ${isHighlighted ? 'text-indigo-600' : 'text-slate-400'}`}>Select ↵</span>
+                  <span className={`text-xs font-bold transition-all duration-200 ${isHighlighted ? 'text-indigo-600 translate-x-0' : 'text-slate-400 opacity-70 group-hover:text-indigo-600'}`}>Select ↵</span>
                 </div>
               );
             })}
@@ -1074,11 +1082,11 @@ function DashboardView({ profile, onLogout, onNavigateReset, onNavigate }) {
           <button
             type="submit"
             disabled={!inputValue.trim() && !selectedFile}
-            className="p-3 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200/60 rounded-xl transition-all cursor-pointer disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed flex-shrink-0 ml-1"
+            className="px-3 py-2 bg-slate-200/70 hover:bg-slate-300/80 text-slate-700 rounded-xl transition-all cursor-pointer disabled:bg-slate-100/60 disabled:text-slate-400 disabled:cursor-not-allowed flex-shrink-0 ml-1 flex items-center justify-center shadow-sm"
             title="Send message"
           >
-            <svg className="w-4 h-4 transform rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 19l9-7-9-7v14z" />
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
             </svg>
           </button>
         </form>
@@ -2003,7 +2011,7 @@ export default function App() {
         localStorage.setItem('finance_profile', JSON.stringify(res.data.data));
       }
     } catch (err) {
-      showToast(err.response?.data?.detail || 'Failed to fetch profile details', 'error');
+      console.warn("Could not fetch remote profile, keeping local cached profile:", err);
     }
   };
 

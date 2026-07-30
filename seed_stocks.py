@@ -75,6 +75,13 @@ def seed():
             inserted += 1
             print(f"  ADDED: {stock_data['symbol']} — {stock_data['name']}")
 
+        # Seed default demo user 'sam' if not present
+        from crud import get_user_by_username, create_user
+        sam_user = get_user_by_username(db, "sam")
+        if not sam_user:
+            create_user(db, username="sam", password="password123", full_name="Sam Weiner", bio="Senior Market Analyst")
+            print("  ADDED default demo user 'sam'")
+
         db.commit()
         print(f"\n✅ Done! Inserted: {inserted} | Skipped (duplicates): {skipped}")
     except Exception as e:

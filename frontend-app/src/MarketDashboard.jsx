@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 
 const API_BASE_URL = 'http://localhost:8080';
@@ -57,7 +57,7 @@ const renderMarkdown = (md) => {
       elements.push(
         <div key={`table-${key}`} className="overflow-x-auto my-4 rounded-xl border border-slate-200 shadow-sm bg-white">
           <table className="w-full text-xs text-left border-collapse">
-            <thead className="bg-slate-900 text-white uppercase font-bold text-[10px] tracking-wider">
+            <thead className="bg-slate-100 text-slate-800 border-b border-slate-200 uppercase font-bold text-[10px] tracking-wider">
               <tr>
                 {headers.map((h, i) => (
                   <th key={i} className="px-4 py-3 text-left border-b border-slate-250 font-bold uppercase">{h.trim()}</th>
@@ -164,7 +164,9 @@ const renderMarkdown = (md) => {
 export default function MarketDashboard({ onNavigate, profile, onLogout, onNavigateReset }) {
 
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [activeView, setActiveView] = useState('stocks'); // 'stocks'
+  const [activeView, setActiveView] = useState(() => {
+    return localStorage.getItem('market_dashboard_active_view') || 'pdf';
+  });
   const [stocks, setStocks] = useState([]);
   const [loadingStocks, setLoadingStocks] = useState(false);
 
@@ -184,6 +186,19 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
   const [isConcallsModalOpen, setIsConcallsModalOpen] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const dashboardSearchRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dashboardSearchRef.current && !dashboardSearchRef.current.contains(event.target)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
 
   const POPULAR_STOCKS = [
@@ -610,10 +625,13 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
 
 
   useEffect(() => {
+    localStorage.setItem('market_dashboard_active_view', activeView);
     if (activeView === 'stocks') {
       fetchStocks();
     }
   }, [activeView]);
+
+
 
   const fetchStocks = async () => {
     setLoadingStocks(true);
@@ -794,7 +812,7 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                     <p className="text-xs text-slate-400 mb-4">Search any NSE stock symbol to fetch live corporate results and financial data.</p>
                     
                     <form onSubmit={handleSearch} className="flex gap-2">
-                      <div className="relative flex-1">
+                      <div ref={dashboardSearchRef} className="relative flex-1">
                         <input
                           type="text"
                           placeholder="Enter stock symbol (e.g. RELIANCE, TCS, HDFCBANK)..."
@@ -815,7 +833,7 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
 
                         {/* Search Auto-Complete Suggestions Dropdown */}
                         {showSuggestions && suggestions.length > 0 && (
-                          <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden divide-y divide-slate-100 animate-fadeIn">
+                          <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 max-h-64 overflow-y-auto overflow-x-hidden custom-scrollbar-light divide-y divide-slate-100 animate-fadeIn">
                             {suggestions.map((item, idx) => (
                               <div
                                 key={idx}
@@ -823,10 +841,11 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                                   setSearchQuery(item.symbol);
                                   setShowSuggestions(false);
                                   setSelectedIndex(-1);
-                                  handleStockSelect(item.symbol);
                                 }}
-                                className={`px-4 py-2.5 transition-colors cursor-pointer flex items-center justify-between group ${
-                                  idx === selectedIndex ? 'bg-indigo-100/80 font-bold' : 'hover:bg-indigo-50/80'
+                                className={`px-4 py-2.5 transition-all duration-200 ease-out cursor-pointer flex items-center justify-between group transform ${
+                                  idx === selectedIndex
+                                    ? 'bg-indigo-100/80 font-bold translate-x-1.5'
+                                    : 'hover:bg-indigo-50/80 hover:translate-x-1.5'
                                 }`}
                               >
                                 <div className="flex items-center gap-2.5">
@@ -846,7 +865,7 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                                     </span>
                                   )}
                                 </div>
-                                <span className={`text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 ${
+                                <span className={`text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 transition-all duration-200 ${
                                   idx === selectedIndex ? 'text-indigo-700 font-black' : 'text-slate-400 group-hover:text-indigo-600'
                                 }`}>
                                   Select ↵
@@ -861,9 +880,24 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                       <button
                         type="submit"
                         disabled={searchLoading}
-                        className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-sm transition-all disabled:opacity-50 cursor-pointer shadow-sm"
+                        className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300/80 font-bold rounded-xl text-sm transition-all disabled:opacity-50 cursor-pointer shadow-sm flex items-center gap-2 active:scale-98"
                       >
-                        {searchLoading ? 'Searching...' : 'Search'}
+                        {searchLoading ? (
+                          <>
+                            <svg className="w-4 h-4 animate-spin text-slate-700" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span>Searching...</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            <span>Search</span>
+                          </>
+                        )}
                       </button>
                     </form>
 
@@ -977,7 +1011,7 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                         {searchResult.concalls && searchResult.concalls.length > 0 && (
                           <button
                             onClick={() => setIsConcallsModalOpen(true)}
-                            className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm hover:shadow active:scale-95"
+                            className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300/80 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
                           >
                             📊 View Concalls & Presentations ({searchResult.concalls.length})
                           </button>
@@ -1034,9 +1068,9 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                           <div className="flex items-center gap-2">
                             <button
                               onClick={handleDownloadCompletePackage}
-                              className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-emerald-600 hover:from-indigo-700 hover:to-emerald-700 text-white font-black rounded-xl text-xs flex items-center gap-2 transition-all cursor-pointer shadow-md hover:shadow-lg active:scale-95"
+                              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300/80 font-black rounded-xl text-xs flex items-center gap-2 transition-all cursor-pointer shadow-sm active:scale-95"
                             >
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <svg className="w-4 h-4 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                               </svg>
                               Download Complete PDF & JSON Data
@@ -1086,23 +1120,23 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
 
                           {/* PyMuPDF Complete Extracted JSON Grid & Raw View */}
                           {selectedPdfSummary.key_value_pairs && Object.keys(selectedPdfSummary.key_value_pairs).length > 0 && (
-                            <div className="bg-slate-900 rounded-2xl p-5 border border-slate-800 shadow-md">
-                              <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-3 border-b border-slate-800 mb-3 gap-2">
+                            <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+                              <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-3 border-b border-slate-150 mb-3 gap-2">
                                 <div className="flex items-center gap-2">
-                                  <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded text-[10px] font-black uppercase tracking-wider">
+                                  <span className="px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded text-[10px] font-black uppercase tracking-wider">
                                     PyMuPDF Complete Extraction
                                   </span>
-                                  <h4 className="text-xs font-bold text-slate-200">Extracted JSON Intelligence</h4>
+                                  <h4 className="text-xs font-black text-slate-800">Extracted JSON Intelligence</h4>
                                 </div>
                                 <div className="flex items-center gap-3">
                                   <span className="text-[10px] text-slate-400 font-bold">
                                     {Object.keys(selectedPdfSummary.key_value_pairs).length} total fields extracted
                                   </span>
-                                  <div className="flex items-center bg-slate-800 rounded-lg p-0.5 border border-slate-700">
+                                  <div className="flex items-center bg-slate-100/90 rounded-lg p-0.5 border border-slate-200">
                                     <button
                                       onClick={() => setJsonViewMode('grid')}
                                       className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                                        jsonViewMode === 'grid' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                                        jsonViewMode === 'grid' ? 'bg-white text-slate-900 border border-slate-200 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'
                                       }`}
                                     >
                                       Grid View
@@ -1110,7 +1144,7 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                                     <button
                                       onClick={() => setJsonViewMode('raw')}
                                       className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                                        jsonViewMode === 'raw' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                                        jsonViewMode === 'raw' ? 'bg-white text-slate-900 border border-slate-200 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'
                                       }`}
                                     >
                                       Raw JSON
@@ -1126,12 +1160,12 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                                   placeholder="Search extracted JSON fields (e.g. Revenue, EBITDA, PAT, EPS)..."
                                   value={jsonSearchQuery}
                                   onChange={(e) => setJsonSearchQuery(e.target.value)}
-                                  className="w-full px-3.5 py-2 bg-slate-800/90 border border-slate-700/80 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-400 focus:bg-white transition-colors"
                                 />
                               </div>
 
                               {jsonViewMode === 'grid' ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-96 overflow-y-auto pr-1">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-96 overflow-y-auto pr-1 custom-scrollbar-light">
                                   {Object.entries(selectedPdfSummary.key_value_pairs)
                                     .filter(([k, v]) => 
                                       !jsonSearchQuery || 
@@ -1139,14 +1173,14 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                                       String(v).toLowerCase().includes(jsonSearchQuery.toLowerCase())
                                     )
                                     .map(([key, val], idx) => (
-                                      <div key={idx} className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/60 flex flex-col justify-between gap-1 hover:border-slate-600 transition-colors">
-                                        <span className="text-[10px] text-slate-400 font-bold uppercase truncate" title={key}>{key}</span>
-                                        <span className="text-xs font-black text-emerald-400 break-words">{String(val)}</span>
+                                      <div key={idx} className="bg-slate-50/90 p-3 rounded-xl border border-slate-200/90 flex flex-col justify-between gap-1 hover:bg-slate-100/90 transition-colors">
+                                        <span className="text-[10px] text-slate-500 font-bold uppercase truncate" title={key}>{key}</span>
+                                        <span className="text-xs font-black text-slate-900 break-words">{String(val)}</span>
                                       </div>
                                     ))}
                                 </div>
                               ) : (
-                                <pre className="text-xs text-emerald-400 font-mono bg-slate-950 p-4 rounded-xl border border-slate-800 max-h-96 overflow-auto whitespace-pre-wrap select-all">
+                                <pre className="text-xs text-slate-800 font-mono bg-slate-50 p-4 rounded-xl border border-slate-200 max-h-96 overflow-auto whitespace-pre-wrap select-all custom-scrollbar-light">
                                   {JSON.stringify(
                                     jsonSearchQuery
                                       ? Object.fromEntries(
@@ -1177,10 +1211,10 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                                   </div>
                                   <table className="w-full text-xs text-left border-collapse">
                                     {tbl.headers && tbl.headers.length > 0 && (
-                                      <thead className="bg-slate-900 text-white uppercase font-bold text-[10px] tracking-wider">
+                                      <thead className="bg-slate-100 text-slate-800 uppercase font-bold text-[10px] tracking-wider border-b border-slate-200">
                                         <tr>
                                           {tbl.headers.map((h, hIdx) => (
-                                            <th key={hIdx} className="px-3.5 py-2.5 border-b border-slate-700 font-extrabold uppercase">{h}</th>
+                                            <th key={hIdx} className="px-3.5 py-2.5 border-b border-slate-200 font-extrabold uppercase">{h}</th>
                                           ))}
                                         </tr>
                                       </thead>
