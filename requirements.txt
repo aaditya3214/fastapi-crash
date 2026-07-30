@@ -4,9 +4,16 @@ uvicorn
 pydantic
 sqlalchemy
 alembic
+psycopg[binary]
+passlib[bcrypt]
+
+# --- Financial & Web Scraping Tools ---
+nsepython
+beautifulsoup4
 
 # --- Other Project Tools (PDF, etc.) ---
 pdfplumber
+pymupdf
 typer
 
 # --- Safe Dependencies ---

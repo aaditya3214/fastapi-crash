@@ -27,6 +27,8 @@ async def lifespan(app: FastAPI):
     try:
         models.Base.metadata.create_all(bind=engine)
         print("✅ Database tables verified/created successfully.")
+        from seed_stocks import seed
+        seed()
     except Exception as e:
         print(f"❌ Error in startup: {e}")
     yield
