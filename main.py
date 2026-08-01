@@ -31,8 +31,22 @@ async def lifespan(app: FastAPI):
         seed()
     except Exception as e:
         print(f"❌ Error in startup: {e}")
+
+    # Start APScheduler background jobs safely
+    try:
+        from scheduler import start_scheduler
+        start_scheduler()
+    except Exception as e:
+        print(f"⚠️ Scheduler startup error: {e}")
+
     yield
-    # Shutdown (nothing to do for now)
+
+    # Shutdown: stop APScheduler background jobs cleanly
+    try:
+        from scheduler import stop_scheduler
+        stop_scheduler()
+    except Exception:
+        pass
 
 
 app = FastAPI(lifespan=lifespan)
@@ -154,6 +168,24 @@ def reset_password(request: PasswordResetRequest, db: Session = Depends(get_db))
         message="Password updated successfully!",
         data={"username": user.username}
     )
+
+@app.get("/api/scheduler/status")
+def get_scheduler_info():
+    try:
+        from scheduler import get_scheduler_status
+        return {"status": "success", "data": get_scheduler_status()}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "data": None}
+
+@app.post("/api/scheduler/trigger-now")
+def trigger_scheduler_job_now():
+    try:
+        from scheduler import auto_sync_stock_concalls_job
+        auto_sync_stock_concalls_job()
+        from scheduler import get_scheduler_status
+        return {"status": "success", "message": "Manual sync triggered successfully!", "data": get_scheduler_status()}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "data": None}
 
 @app.get("/stocks", response_model=StandardResponse)
 def get_stocks(db: Session = Depends(get_db)):

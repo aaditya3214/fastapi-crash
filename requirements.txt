@@ -7,6 +7,7 @@ alembic
 psycopg[binary]
 passlib[bcrypt]
 python-multipart
+apscheduler
 
 # --- Financial & Web Scraping Tools ---
 nsepython

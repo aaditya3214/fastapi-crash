@@ -186,7 +186,34 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
   const [isConcallsModalOpen, setIsConcallsModalOpen] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [isSchedulerModalOpen, setIsSchedulerModalOpen] = useState(false);
+  const [schedulerStatusData, setSchedulerStatusData] = useState(null);
+  const [schedulerLoading, setSchedulerLoading] = useState(false);
   const dashboardSearchRef = useRef(null);
+
+  const fetchSchedulerStatus = () => {
+    setSchedulerLoading(true);
+    axios.get(`${API_BASE_URL}/api/scheduler/status`)
+      .then(res => {
+        if (res.data && res.data.data) {
+          setSchedulerStatusData(res.data.data);
+        }
+        setSchedulerLoading(false);
+      })
+      .catch(() => setSchedulerLoading(false));
+  };
+
+  const triggerSchedulerNow = () => {
+    setSchedulerLoading(true);
+    axios.post(`${API_BASE_URL}/api/scheduler/trigger-now`)
+      .then(res => {
+        if (res.data && res.data.data) {
+          setSchedulerStatusData(res.data.data);
+        }
+        setSchedulerLoading(false);
+      })
+      .catch(() => setSchedulerLoading(false));
+  };
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -203,6 +230,7 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
 
   const POPULAR_STOCKS = [
     { symbol: 'RELIANCE', name: 'Reliance Industries Ltd.' },
+    { symbol: 'APOLLOHOSP', name: 'Apollo Hospitals Enterprise Ltd.' },
     { symbol: 'TCS', name: 'Tata Consultancy Services Ltd.' },
     { symbol: 'HDFCBANK', name: 'HDFC Bank Ltd.' },
     { symbol: 'INFY', name: 'Infosys Ltd.' },
@@ -775,16 +803,30 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
           </div>
 
 
-          <div
-            onClick={() => setIsProfileOpen(true)}
-            className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
-          >
-            <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-800 border border-slate-200 flex items-center justify-center font-bold text-xs shadow-sm">
-              {profile?.username?.substring(0, 2).toUpperCase() || 'US'}
-            </div>
-            <div className="flex flex-col text-left">
-              <span className="text-xs font-black text-slate-800 leading-tight">{profile?.full_name || 'User'}</span>
-              <span className="text-[10px] font-bold text-slate-400 leading-tight">@{profile?.username || 'user'}</span>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                fetchSchedulerStatus();
+                setIsSchedulerModalOpen(true);
+              }}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200/80 text-slate-700 border border-slate-300/70 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm select-none"
+              title="Automated Background Task Scheduler"
+            >
+              <span className="w-2 h-2 rounded-full bg-slate-800 animate-pulse"></span>
+              <span>Scheduler (Auto-Sync)</span>
+            </button>
+
+            <div
+              onClick={() => setIsProfileOpen(true)}
+              className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+            >
+              <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-800 border border-slate-200 flex items-center justify-center font-bold text-xs shadow-sm">
+                {profile?.username?.substring(0, 2).toUpperCase() || 'US'}
+              </div>
+              <div className="flex flex-col text-left">
+                <span className="text-xs font-black text-slate-800 leading-tight">{profile?.full_name || 'User'}</span>
+                <span className="text-[10px] font-bold text-slate-400 leading-tight">@{profile?.username || 'user'}</span>
+              </div>
             </div>
           </div>
         </header>
@@ -1561,6 +1603,116 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                 ⚠️ {summaryError}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Monochromatic Automated Task Scheduler Modal */}
+      {isSchedulerModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn select-none">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-lg w-full p-6 space-y-5 relative text-slate-800">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-slate-800 text-white flex items-center justify-center font-bold text-sm">
+                  ⚡
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 leading-tight">Automated Background Scheduler</h3>
+                  <p className="text-[11px] font-semibold text-slate-400">Auto-Syncs Screener Concalls across 8 PostgreSQL Tables</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsSchedulerModalOpen(false)}
+                className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                title="Close Modal"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            {schedulerLoading ? (
+              <div className="py-8 text-center text-slate-400 font-semibold text-xs flex justify-center items-center gap-2">
+                <span className="w-4 h-4 border-2 border-slate-800 border-t-transparent rounded-full animate-spin"></span>
+                Processing automated stock sync...
+              </div>
+            ) : (
+              <div className="space-y-4 text-xs font-sans">
+                {/* Monochromatic Status Grid */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                    <span className="block text-[10px] font-extrabold uppercase text-slate-400">Engine Status</span>
+                    <span className="text-sm font-black text-slate-800 capitalize flex items-center gap-1.5 mt-0.5">
+                      <span className="w-2 h-2 rounded-full bg-slate-800"></span>
+                      {schedulerStatusData?.status || 'Active'}
+                    </span>
+                  </div>
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                    <span className="block text-[10px] font-extrabold uppercase text-slate-400">Total Auto Runs</span>
+                    <span className="text-sm font-black text-slate-800 mt-0.5 block">
+                      #{schedulerStatusData?.total_runs ?? 0}
+                    </span>
+                  </div>
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                    <span className="block text-[10px] font-extrabold uppercase text-slate-400">Last Sync Time</span>
+                    <span className="text-xs font-bold text-slate-700 mt-0.5 block">
+                      {schedulerStatusData?.last_run_at || 'Just Now'}
+                    </span>
+                  </div>
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                    <span className="block text-[10px] font-extrabold uppercase text-slate-400">Target Tables</span>
+                    <span className="text-xs font-bold text-slate-700 mt-0.5 block">
+                      8 PostgreSQL Schema Tables
+                    </span>
+                  </div>
+                </div>
+
+                {/* Log Console */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Live Scheduler Logs</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={triggerSchedulerNow}
+                        className="text-[10px] font-bold text-slate-800 hover:text-black bg-slate-200 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                      >
+                        ⚡ Run Cycle Now
+                      </button>
+                      <button
+                        onClick={fetchSchedulerStatus}
+                        className="text-[10px] font-bold text-slate-600 hover:text-slate-900 underline cursor-pointer"
+                      >
+                        Refresh Logs
+                      </button>
+                    </div>
+                  </div>
+                  <div className="bg-slate-900 text-slate-200 p-3 rounded-xl font-mono text-[11px] max-h-36 overflow-y-auto space-y-1 shadow-inner">
+                    {schedulerStatusData?.recent_logs && schedulerStatusData.recent_logs.length > 0 ? (
+                      schedulerStatusData.recent_logs.map((log, idx) => (
+                        <div key={idx} className="leading-relaxed">{log}</div>
+                      ))
+                    ) : (
+                      <div className="text-slate-500 italic">No execution logs recorded yet.</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Modal Footer */}
+            <div className="flex justify-end pt-2 border-t border-slate-100">
+              <button
+                onClick={() => setIsSchedulerModalOpen(false)}
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition-all cursor-pointer text-xs"
+              >
+                Close
+              </button>
+            </div>
+
           </div>
         </div>
       )}

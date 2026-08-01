@@ -410,6 +410,9 @@ const getDynamicAIResponse = async (query) => {
     'ongc': 'ONGC',
     'trent': 'TRENT',
     'apollo': 'APOLLOHOSP',
+    'apollo hospital': 'APOLLOHOSP',
+    'apollo hospitals': 'APOLLOHOSP',
+    'apollohosp': 'APOLLOHOSP',
     'adani': 'ADANIENT'
   };
 
@@ -846,6 +849,7 @@ function DashboardView({ profile, onLogout, onNavigateReset, onNavigate }) {
 
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [fetchedStocks, setFetchedStocks] = useState([]);
   const searchContainerRef = useRef(null);
 
   useEffect(() => {
@@ -860,8 +864,30 @@ function DashboardView({ profile, onLogout, onNavigateReset, onNavigate }) {
     };
   }, []);
 
-  const STOCK_SUGGESTIONS = [
+  useEffect(() => {
+    axios.get(`${API_BASE_URL}/stocks`)
+      .then(res => {
+        if (res.data && Array.isArray(res.data.data)) {
+          setFetchedStocks(res.data.data.map(s => ({
+            symbol: s.symbol,
+            name: s.name,
+            sector: 'Stock Market'
+          })));
+        }
+      })
+      .catch(err => console.warn('Failed to fetch backend stocks for chat suggestions:', err));
+  }, []);
+
+  const DEFAULT_STOCK_SUGGESTIONS = [
+    { symbol: 'APOLLOHOSP', name: 'Apollo Hospitals Enterprise Limited', sector: 'Healthcare & Hospitals' },
     { symbol: 'RELIANCE', name: 'Reliance Industries Limited', sector: 'Conglomerate (Energy/Retail/Telecom)' },
+    { symbol: 'TCS', name: 'Tata Consultancy Services', sector: 'IT Services' },
+    { symbol: 'INFY', name: 'Infosys Limited', sector: 'IT Services' },
+    { symbol: 'HDFCBANK', name: 'HDFC Bank Limited', sector: 'Banking & Financials' },
+    { symbol: 'SBIN', name: 'State Bank of India', sector: 'Banking & Financials' },
+    { symbol: 'ICICIBANK', name: 'ICICI Bank Limited', sector: 'Banking & Financials' },
+    { symbol: 'AXISBANK', name: 'Axis Bank Limited', sector: 'Banking & Financials' },
+    { symbol: 'KOTAKBANK', name: 'Kotak Mahindra Bank Limited', sector: 'Banking & Financials' },
     { symbol: 'ADANIENT', name: 'Adani Enterprises Limited', sector: 'Conglomerate / Infrastructure' },
     { symbol: 'ADANIPORTS', name: 'Adani Ports and Special Economic Zone', sector: 'Infrastructure / Shipping' },
     { symbol: 'ADANIPOWER', name: 'Adani Power Limited', sector: 'Utilities & Power' },
@@ -869,27 +895,57 @@ function DashboardView({ profile, onLogout, onNavigateReset, onNavigate }) {
     { symbol: 'ADANITRANS', name: 'Adani Energy Solutions Limited', sector: 'Power Transmission' },
     { symbol: 'ATGL', name: 'Adani Total Gas Limited', sector: 'City Gas Distribution' },
     { symbol: 'AWL', name: 'Adani Wilmar Limited', sector: 'FMCG / Edible Oils' },
-    { symbol: 'TCS', name: 'Tata Consultancy Services', sector: 'IT Services' },
-    { symbol: 'INFY', name: 'Infosys Limited', sector: 'IT Services' },
-    { symbol: 'HDFCBANK', name: 'HDFC Bank Limited', sector: 'Banking & Financials' },
-    { symbol: 'SBIN', name: 'State Bank of India', sector: 'Banking & Financials' },
-    { symbol: 'ICICIBANK', name: 'ICICI Bank Limited', sector: 'Banking & Financials' },
     { symbol: 'WIPRO', name: 'Wipro Limited', sector: 'IT Services' },
+    { symbol: 'HCLTECH', name: 'HCL Technologies Limited', sector: 'IT Services' },
+    { symbol: 'LTIM', name: 'LTIMindtree Limited', sector: 'IT Services' },
+    { symbol: 'TECHM', name: 'Tech Mahindra Limited', sector: 'IT Services' },
     { symbol: 'BHARTIARTL', name: 'Bharti Airtel Limited', sector: 'Telecom' },
     { symbol: 'TATAMOTORS', name: 'Tata Motors Limited', sector: 'Automotive' },
     { symbol: 'TATASTEEL', name: 'Tata Steel Limited', sector: 'Metals & Mining' },
     { symbol: 'LT', name: 'Larsen & Toubro Limited', sector: 'Engineering & Construction' },
     { symbol: 'ITC', name: 'ITC Limited', sector: 'FMCG & Diversified' },
-    { symbol: 'HINDUNILVR', name: 'Hindustan Unilever Limited', sector: 'FMCG' }
+    { symbol: 'HINDUNILVR', name: 'Hindustan Unilever Limited', sector: 'FMCG' },
+    { symbol: 'ASIANPAINT', name: 'Asian Paints Limited', sector: 'Consumer Goods' },
+    { symbol: 'MARUTI', name: 'Maruti Suzuki India Limited', sector: 'Automotive' },
+    { symbol: 'SUNPHARMA', name: 'Sun Pharmaceutical Industries Ltd.', sector: 'Pharmaceuticals' },
+    { symbol: 'CIPLA', name: 'Cipla Limited', sector: 'Pharmaceuticals' },
+    { symbol: 'DRREDDY', name: 'Dr. Reddy\'s Laboratories Ltd.', sector: 'Pharmaceuticals' },
+    { symbol: 'BAJFINANCE', name: 'Bajaj Finance Limited', sector: 'Financial Services' },
+    { symbol: 'BAJAJFINSV', name: 'Bajaj Finserv Limited', sector: 'Financial Services' },
+    { symbol: 'NTPC', name: 'NTPC Limited', sector: 'Power & Energy' },
+    { symbol: 'POWERGRID', name: 'Power Grid Corporation of India', sector: 'Power Transmission' },
+    { symbol: 'TITAN', name: 'Titan Company Limited', sector: 'Consumer Goods' },
+    { symbol: 'ULTRACEMCO', name: 'UltraTech Cement Limited', sector: 'Materials & Cement' },
+    { symbol: 'COALINDIA', name: 'Coal India Limited', sector: 'Energy & Mining' },
+    { symbol: 'NESTLEIND', name: 'Nestle India Limited', sector: 'FMCG' },
+    { symbol: 'GRASIM', name: 'Grasim Industries Limited', sector: 'Materials' },
+    { symbol: 'EICHERMOT', name: 'Eicher Motors Limited', sector: 'Automotive' },
+    { symbol: 'HEROMOTOCO', name: 'Hero MotoCorp Limited', sector: 'Automotive' },
+    { symbol: 'HDFCLIFE', name: 'HDFC Life Insurance Co. Ltd.', sector: 'Insurance' },
+    { symbol: 'SBILIFE', name: 'SBI Life Insurance Co. Ltd.', sector: 'Insurance' },
+    { symbol: 'HINDALCO', name: 'Hindalco Industries Limited', sector: 'Metals & Mining' },
+    { symbol: 'JSWSTEEL', name: 'JSW Steel Limited', sector: 'Metals & Mining' },
+    { symbol: 'BPCL', name: 'Bharat Petroleum Corp. Ltd.', sector: 'Oil & Gas' },
+    { symbol: 'M&M', name: 'Mahindra & Mahindra Limited', sector: 'Automotive' },
+    { symbol: 'BRITANNIA', name: 'Britannia Industries Limited', sector: 'FMCG' },
+    { symbol: 'BEL', name: 'Bharat Electronics Limited', sector: 'Defence & Electronics' },
+    { symbol: 'ONGC', name: 'Oil & Natural Gas Corporation', sector: 'Oil & Gas' },
+    { symbol: 'TRENT', name: 'Trent Limited', sector: 'Retail' }
   ];
 
+  const allStockSuggestions = [...fetchedStocks, ...DEFAULT_STOCK_SUGGESTIONS].reduce((acc, current) => {
+    const exists = acc.find(item => item.symbol.toUpperCase() === current.symbol.toUpperCase());
+    if (!exists) acc.push(current);
+    return acc;
+  }, []);
+
   const filteredSuggestions = inputValue.trim() 
-    ? STOCK_SUGGESTIONS.filter(s => 
+    ? allStockSuggestions.filter(s => 
         s.symbol.toLowerCase().includes(inputValue.trim().toLowerCase()) || 
         s.name.toLowerCase().includes(inputValue.trim().toLowerCase()) ||
-        s.sector.toLowerCase().includes(inputValue.trim().toLowerCase())
+        (s.sector && s.sector.toLowerCase().includes(inputValue.trim().toLowerCase()))
       )
-    : STOCK_SUGGESTIONS.slice(0, 6);
+    : allStockSuggestions.slice(0, 7);
 
   const handleKeyDown = (e) => {
     if (!showSuggestions || filteredSuggestions.length === 0) return;
