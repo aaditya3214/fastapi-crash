@@ -1615,8 +1615,10 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-slate-800 text-white flex items-center justify-center font-bold text-sm">
-                  ⚡
+                <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 flex items-center justify-center font-bold text-sm shadow-sm">
+                  <svg className="w-4 h-4 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
                 </div>
                 <div>
                   <h3 className="text-base font-black text-slate-900 leading-tight">Automated Background Scheduler</h3>
@@ -1637,33 +1639,33 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
             {/* Modal Content */}
             {schedulerLoading ? (
               <div className="py-8 text-center text-slate-400 font-semibold text-xs flex justify-center items-center gap-2">
-                <span className="w-4 h-4 border-2 border-slate-800 border-t-transparent rounded-full animate-spin"></span>
+                <span className="w-4 h-4 border-2 border-slate-600 border-t-transparent rounded-full animate-spin"></span>
                 Processing automated stock sync...
               </div>
             ) : (
               <div className="space-y-4 text-xs font-sans">
                 {/* Monochromatic Status Grid */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                  <div className="p-3 bg-slate-50 border border-slate-200/90 rounded-xl">
                     <span className="block text-[10px] font-extrabold uppercase text-slate-400">Engine Status</span>
                     <span className="text-sm font-black text-slate-800 capitalize flex items-center gap-1.5 mt-0.5">
-                      <span className="w-2 h-2 rounded-full bg-slate-800"></span>
+                      <span className="w-2 h-2 rounded-full bg-slate-700"></span>
                       {schedulerStatusData?.status || 'Active'}
                     </span>
                   </div>
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                  <div className="p-3 bg-slate-50 border border-slate-200/90 rounded-xl">
                     <span className="block text-[10px] font-extrabold uppercase text-slate-400">Total Auto Runs</span>
                     <span className="text-sm font-black text-slate-800 mt-0.5 block">
                       #{schedulerStatusData?.total_runs ?? 0}
                     </span>
                   </div>
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                  <div className="p-3 bg-slate-50 border border-slate-200/90 rounded-xl">
                     <span className="block text-[10px] font-extrabold uppercase text-slate-400">Last Sync Time</span>
                     <span className="text-xs font-bold text-slate-700 mt-0.5 block">
                       {schedulerStatusData?.last_run_at || 'Just Now'}
                     </span>
                   </div>
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                  <div className="p-3 bg-slate-50 border border-slate-200/90 rounded-xl">
                     <span className="block text-[10px] font-extrabold uppercase text-slate-400">Target Tables</span>
                     <span className="text-xs font-bold text-slate-700 mt-0.5 block">
                       8 PostgreSQL Schema Tables
@@ -1678,25 +1680,25 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                     <div className="flex items-center gap-2">
                       <button
                         onClick={triggerSchedulerNow}
-                        className="text-[10px] font-bold text-slate-800 hover:text-black bg-slate-200 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                        className="text-[10px] font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-2 py-1 rounded-lg cursor-pointer transition-all shadow-sm"
                       >
                         ⚡ Run Cycle Now
                       </button>
                       <button
                         onClick={fetchSchedulerStatus}
-                        className="text-[10px] font-bold text-slate-600 hover:text-slate-900 underline cursor-pointer"
+                        className="text-[10px] font-bold text-slate-500 hover:text-slate-800 underline cursor-pointer"
                       >
                         Refresh Logs
                       </button>
                     </div>
                   </div>
-                  <div className="bg-slate-900 text-slate-200 p-3 rounded-xl font-mono text-[11px] max-h-36 overflow-y-auto space-y-1 shadow-inner">
+                  <div className="bg-slate-50 border border-slate-200/90 text-slate-700 p-3 rounded-xl font-mono text-[11px] max-h-36 overflow-y-auto space-y-1 shadow-inner select-text">
                     {schedulerStatusData?.recent_logs && schedulerStatusData.recent_logs.length > 0 ? (
                       schedulerStatusData.recent_logs.map((log, idx) => (
-                        <div key={idx} className="leading-relaxed">{log}</div>
+                        <div key={idx} className="leading-relaxed border-b border-slate-100 last:border-0 pb-0.5">{log}</div>
                       ))
                     ) : (
-                      <div className="text-slate-500 italic">No execution logs recorded yet.</div>
+                      <div className="text-slate-400 italic">No execution logs recorded yet.</div>
                     )}
                   </div>
                 </div>
@@ -1707,7 +1709,7 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
             <div className="flex justify-end pt-2 border-t border-slate-100">
               <button
                 onClick={() => setIsSchedulerModalOpen(false)}
-                className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition-all cursor-pointer text-xs"
+                className="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 font-bold rounded-xl transition-all cursor-pointer text-xs shadow-sm"
               >
                 Close
               </button>
