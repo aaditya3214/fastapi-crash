@@ -6,6 +6,7 @@ sqlalchemy
 alembic
 psycopg[binary]
 passlib[bcrypt]
+python-multipart
 
 # --- Financial & Web Scraping Tools ---
 nsepython

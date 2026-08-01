@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-import { useState, useEffect } from 'react';
-=======
 import React, { useState, useEffect, useRef } from 'react';
->>>>>>> 4c49318b513d468b65dee158253324dab8b458d1
 import axios from 'axios';
 
 const API_BASE_URL = 'http://localhost:8080';
@@ -180,6 +176,7 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState(null);
   const [selectedPdfSummary, setSelectedPdfSummary] = useState(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState(null);
   const [uploadModalTarget, setUploadModalTarget] = useState(null); // { concall, pptUrl }
   const [dragActive, setDragActive] = useState(false);
