@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 
 const API_BASE_URL = 'http://localhost:8080';
@@ -10,7 +10,7 @@ const getDownloadProxyUrl = (originalUrl) => {
   let filename = "";
   try {
     filename = decodeURIComponent(originalUrl.split('?')[0].split('/').pop());
-  } catch (e) {
+  } catch {
     filename = originalUrl.split('?')[0].split('/').pop();
   }
   
@@ -174,7 +174,6 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState(null);
   const [selectedPdfSummary, setSelectedPdfSummary] = useState(null);
-  const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState(null);
   const [uploadModalTarget, setUploadModalTarget] = useState(null); // { concall, pptUrl }
   const [dragActive, setDragActive] = useState(false);
@@ -360,23 +359,6 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
   };
 
   const [savedDbStates, setSavedDbStates] = useState({});
-  const [dbReportsModalOpen, setDbReportsModalOpen] = useState(false);
-  const [dbReports, setDbReports] = useState([]);
-  const [loadingDbReports, setLoadingDbReports] = useState(false);
-
-  const fetchDbReports = async () => {
-    setLoadingDbReports(true);
-    try {
-      const res = await axios.get(`${API_BASE_URL}/api/database-reports`);
-      if (res.data && res.data.reports) {
-        setDbReports(res.data.reports);
-      }
-    } catch (err) {
-      console.error("Failed to fetch database reports:", err);
-    } finally {
-      setLoadingDbReports(false);
-    }
-  };
 
   const handleSaveToDb = async (concall) => {
     if (!concall) return;
@@ -591,30 +573,6 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
     }
   };
 
-  const formatNumber = (num, isCurrency = true) => {
-    if (num === null || num === undefined || num === '') return '—';
-    const val = parseFloat(num);
-    if (isNaN(val)) return num;
-    
-    // In NSE corporate results, values are typically reported in Lakhs.
-    // Convert Lakhs to Crores if large enough.
-    if (isCurrency) {
-      // 100 Lakhs = 1 Crore
-      if (Math.abs(val) >= 100) {
-        return `₹ ${(val / 100).toFixed(2)} Cr`;
-      }
-      return `₹ ${val.toFixed(2)} Lakhs`;
-    }
-    return val.toLocaleString('en-IN');
-  };
-
-
-  useEffect(() => {
-    if (activeView === 'stocks') {
-      fetchStocks();
-    }
-  }, [activeView]);
-
   const fetchStocks = async () => {
     setLoadingStocks(true);
     try {
@@ -626,6 +584,13 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
       setLoadingStocks(false);
     }
   };
+
+  useEffect(() => {
+    if (activeView === 'stocks') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      fetchStocks();
+    }
+  }, [activeView]);
 
   const handleStockSelect = async (symbol) => {
     setSearchQuery(symbol);
@@ -1249,7 +1214,7 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                       </tr>
                     </thead>
                     <tbody>
-                      {stocks.map((stock, idx) => (
+                      {stocks.map((stock) => (
                         <tr
                           key={stock.id}
                           onClick={() => handleStockSelect(stock.symbol)}

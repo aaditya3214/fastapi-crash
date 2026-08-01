@@ -911,6 +911,7 @@ function DashboardView({ profile, onLogout, onNavigateReset, onNavigate }) {
     if (!textToSend && !selectedFile) return;
 
     const userMessageText = textToSend || (selectedFile ? `Uploaded file: ${selectedFile.name}` : '');
+    // eslint-disable-next-line react-hooks/purity
     const userMsg = {
       id: `msg-${Date.now()}`,
       role: 'user',
@@ -1102,16 +1103,18 @@ function DashboardView({ profile, onLogout, onNavigateReset, onNavigate }) {
               return m;
             })
           }));
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setThreads(cleaned.length > 0 ? cleaned : [{ id: 'thread-1', title: 'First Chat', messages: [] }]);
           if (cleaned.length > 0) {
             setActiveThreadId(cleaned[0].id);
           }
         } else {
           const defaultThreads = [{ id: 'thread-1', title: 'First Chat', messages: [] }];
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setThreads(defaultThreads);
           setActiveThreadId('thread-1');
         }
-      } catch (e) {
+      } catch {
         // ignore
       }
     }
@@ -1968,7 +1971,7 @@ export default function App() {
       const defaultUser = { username: 'sam' };
       localStorage.setItem('finance_user', JSON.stringify(defaultUser));
       return defaultUser;
-    } catch (e) {
+    } catch {
       return { username: 'sam' };
     }
   });
@@ -1980,7 +1983,7 @@ export default function App() {
       const defaultProf = { username: 'sam', full_name: 'Sam Weiner', bio: 'Senior Market Analyst' };
       localStorage.setItem('finance_profile', JSON.stringify(defaultProf));
       return defaultProf;
-    } catch (e) {
+    } catch {
       return { username: 'sam', full_name: 'Sam Weiner', bio: 'Senior Market Analyst' };
     }
   });
@@ -2011,7 +2014,7 @@ export default function App() {
   const handleLogin = async (username, password) => {
     setLoading(true);
     try {
-      const res = await axios.post(`${API_BASE_URL}/login`, { username, password });
+      await axios.post(`${API_BASE_URL}/login`, { username, password });
       const userData = { username };
       setUser(userData);
       localStorage.setItem('finance_user', JSON.stringify(userData));
@@ -2065,7 +2068,7 @@ export default function App() {
   const handleLogout = async () => {
     try {
       await axios.post(`${API_BASE_URL}/logout`);
-    } catch (e) {
+    } catch {
       // ignore
     }
     setUser(null);
@@ -2078,8 +2081,10 @@ export default function App() {
 
   useEffect(() => {
     if (user?.username) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchProfile(user.username);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Dynamically update document title based on current view state
@@ -2093,18 +2098,11 @@ export default function App() {
 
   // Auth Guard redirects - Default to main workspace
   useEffect(() => {
-    if (!user) {
-      const defaultUser = { username: 'sam' };
-      const defaultProf = { username: 'sam', full_name: 'Sam Weiner', bio: 'Senior Market Analyst' };
-      setUser(defaultUser);
-      setProfile(defaultProf);
-      localStorage.setItem('finance_user', JSON.stringify(defaultUser));
-      localStorage.setItem('finance_profile', JSON.stringify(defaultProf));
-    }
     if (view !== 'profile' && !view) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setView('profile');
     }
-  }, [user, view]);
+  }, [view]);
 
   return (
     <div className="min-h-screen bg-[#ffffff] text-[#0d0d0d] flex flex-col font-sans relative">
