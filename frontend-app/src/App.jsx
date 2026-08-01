@@ -2011,7 +2011,34 @@ function ResetPasswordView({ onReset, onNavigateLogin, currentUser, loading }) {
    MAIN APP ROUTER-FREE COMPONENT
    ========================================== */
 export default function App() {
-  const [view, setView] = useState('profile');
+  const [user, setUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('finance_user');
+      if (saved) return JSON.parse(saved);
+      return null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [profile, setProfile] = useState(() => {
+    try {
+      const saved = localStorage.getItem('finance_profile');
+      if (saved) return JSON.parse(saved);
+      return null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [view, setView] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('finance_user');
+      return savedUser ? 'profile' : 'login';
+    } catch {
+      return 'login';
+    }
+  });
 
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
 
@@ -2027,30 +2054,6 @@ export default function App() {
     window.history.pushState({}, '', path);
     setCurrentPath(path);
   };
-
-  const [user, setUser] = useState(() => {
-    try {
-      const saved = localStorage.getItem('finance_user');
-      if (saved) return JSON.parse(saved);
-      const defaultUser = { username: 'sam' };
-      localStorage.setItem('finance_user', JSON.stringify(defaultUser));
-      return defaultUser;
-    } catch {
-      return { username: 'sam' };
-    }
-  });
-
-  const [profile, setProfile] = useState(() => {
-    try {
-      const saved = localStorage.getItem('finance_profile');
-      if (saved) return JSON.parse(saved);
-      const defaultProf = { username: 'sam', full_name: 'Sam Weiner', bio: 'Senior Market Analyst' };
-      localStorage.setItem('finance_profile', JSON.stringify(defaultProf));
-      return defaultProf;
-    } catch {
-      return { username: 'sam', full_name: 'Sam Weiner', bio: 'Senior Market Analyst' };
-    }
-  });
 
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
@@ -2085,6 +2088,7 @@ export default function App() {
       showToast('Successfully logged in!', 'success');
       await fetchProfile(username);
       setView('profile');
+      navigateTo('/dashboard');
     } catch (err) {
       showToast(err.response?.data?.message || err.response?.data?.detail || 'Login failed. Please check credentials.', 'error');
     } finally {
@@ -2099,6 +2103,7 @@ export default function App() {
       await axios.post(`${API_BASE_URL}/register`, formData);
       showToast('Registration successful! Please log in.', 'success');
       setView('login');
+      navigateTo('/login');
     } catch (err) {
       showToast(err.response?.data?.message || err.response?.data?.detail || 'Registration failed. Username may exist.', 'error');
     } finally {
@@ -2121,6 +2126,7 @@ export default function App() {
       localStorage.removeItem('finance_user');
       localStorage.removeItem('finance_profile');
       setView('login');
+      navigateTo('/login');
     } catch (err) {
       showToast(err.response?.data?.message || err.response?.data?.detail || 'Failed to reset password. Incorrect details.', 'error');
     } finally {
@@ -2140,6 +2146,7 @@ export default function App() {
     localStorage.removeItem('finance_user');
     localStorage.removeItem('finance_profile');
     setView('login');
+    navigateTo('/login');
     showToast('Logged out successfully.', 'success');
   };
 
@@ -2153,20 +2160,12 @@ export default function App() {
 
   // Dynamically update document title based on current view state
   useEffect(() => {
-    if (view === 'profile') {
+    if (user && (view === 'profile' || currentPath === '/dashboard')) {
       document.title = 'Stock Analysis AI';
     } else {
       document.title = 'Log in or Sign up';
     }
-  }, [view]);
-
-  // Auth Guard redirects - Default to main workspace
-  useEffect(() => {
-    if (view !== 'profile' && !view) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setView('profile');
-    }
-  }, [view]);
+  }, [view, currentPath, user]);
 
   return (
     <div className="min-h-screen bg-[#ffffff] text-[#0d0d0d] flex flex-col font-sans relative">
@@ -2184,30 +2183,12 @@ export default function App() {
         </div>
       )}
 
-      {currentPath === '/dashboard' ? (
-        <MarketDashboard
-          onNavigate={navigateTo}
-          profile={profile}
-          onLogout={handleLogout}
-          onNavigateReset={() => { setView('reset-password'); navigateTo('/'); }}
-        />
-      ) : view === 'login' ? (
-        <main className="flex-grow flex items-center justify-center px-4 py-20 relative z-10 bg-slate-50 min-h-screen">
-          <div className="w-full max-w-[440px] flex flex-col items-center bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10">
-            <LoginView
-              onLogin={handleLogin}
-              onNavigateRegister={() => setView('register')}
-              onNavigateReset={() => setView('reset-password')}
-              loading={loading}
-            />
-          </div>
-        </main>
-      ) : view === 'register' ? (
+      {view === 'register' ? (
         <main className="flex-grow flex items-center justify-center px-4 py-20 relative z-10 bg-slate-50 min-h-screen">
           <div className="w-full max-w-[440px] flex flex-col items-center bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10">
             <RegisterView
               onRegister={handleRegister}
-              onNavigateLogin={() => setView('login')}
+              onNavigateLogin={() => { setView('login'); navigateTo('/login'); }}
               loading={loading}
             />
           </div>
@@ -2217,18 +2198,36 @@ export default function App() {
           <div className="w-full max-w-[440px] flex flex-col items-center bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10">
             <ResetPasswordView
               onReset={handleResetPassword}
-              onNavigateLogin={() => setView('login')}
+              onNavigateLogin={() => { setView('login'); navigateTo('/login'); }}
               currentUser={user?.username || ''}
               loading={loading}
             />
           </div>
         </main>
+      ) : !user || view === 'login' ? (
+        <main className="flex-grow flex items-center justify-center px-4 py-20 relative z-10 bg-slate-50 min-h-screen">
+          <div className="w-full max-w-[440px] flex flex-col items-center bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10">
+            <LoginView
+              onLogin={handleLogin}
+              onNavigateRegister={() => { setView('register'); navigateTo('/register'); }}
+              onNavigateReset={() => { setView('reset-password'); navigateTo('/reset-password'); }}
+              loading={loading}
+            />
+          </div>
+        </main>
+      ) : currentPath === '/dashboard' ? (
+        <MarketDashboard
+          onNavigate={navigateTo}
+          profile={profile}
+          onLogout={handleLogout}
+          onNavigateReset={() => { setView('reset-password'); navigateTo('/reset-password'); }}
+        />
       ) : (
         <DashboardErrorBoundary profile={profile}>
           <DashboardView
-            profile={profile || { username: 'sam', full_name: 'Sam Weiner' }}
+            profile={profile || { username: user?.username || 'user', full_name: user?.username || 'User' }}
             onLogout={handleLogout}
-            onNavigateReset={() => setView('reset-password')}
+            onNavigateReset={() => { setView('reset-password'); navigateTo('/reset-password'); }}
             onNavigate={navigateTo}
           />
         </DashboardErrorBoundary>

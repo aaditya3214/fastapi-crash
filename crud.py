@@ -5,6 +5,13 @@ from sqlalchemy.exc import IntegrityError
 # pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Session
 # pyrefly: ignore [missing-import]
+import bcrypt
+if not hasattr(bcrypt, "__about__"):
+    class BcryptAbout:
+        __version__ = getattr(bcrypt, "__version__", "4.0.1")
+    bcrypt.__about__ = BcryptAbout()
+
+# pyrefly: ignore [missing-import]
 from passlib.context import CryptContext
 
 from models import User
@@ -12,10 +19,21 @@ from models import User
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    pwd_bytes = password.encode('utf-8')[:72]
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(pwd_bytes, salt).decode('utf-8')
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        pwd_bytes = plain_password.encode('utf-8')[:72]
+        if bcrypt.checkpw(pwd_bytes, hashed_password.encode('utf-8')):
+            return True
+    except Exception:
+        pass
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception:
+        return False
 
 def get_user_by_username(db: Session, username: str) -> User | None:
     statement = select(User).where(User.username == username)

@@ -91,6 +91,12 @@ def get_db():
 # --- AUTH ROUTES ---
 @app.post("/register", response_model=StandardResponse)
 def register(user_create: UserCreate, db: Session = Depends(get_db)):
+    existing = get_user_by_username(db, user_create.username)
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Registration failed. Username already exists."
+        )
     try:
         user = create_user(
             db,
@@ -108,7 +114,7 @@ def register(user_create: UserCreate, db: Session = Depends(get_db)):
         print(f"Registration Error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Registration failed. Username might already exist."
+            detail=f"Registration failed: {str(e)}"
         )
 
 @app.post("/login", response_model=StandardResponse)
