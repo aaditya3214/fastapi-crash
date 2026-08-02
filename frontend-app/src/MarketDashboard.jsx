@@ -1652,7 +1652,7 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                     <button
                       type="submit"
                       disabled={schedSubmitting}
-                      className="w-full px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      className="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                     >
                       {schedSubmitting ? 'Saving...' : 'Add Schedule Entry'}
                     </button>
@@ -2159,7 +2159,7 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
               </button>
               <button
                 onClick={handleConfirmDelete}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-900 border border-slate-300 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
               >
                 Confirm Delete
               </button>
