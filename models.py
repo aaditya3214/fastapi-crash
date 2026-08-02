@@ -1,5 +1,5 @@
 # pyrefly: ignore [missing-import]
-from sqlalchemy import Column, Integer, String, Float, Text, DateTime, ForeignKey, JSON, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Float, Text, DateTime, ForeignKey, JSON, UniqueConstraint, Boolean
 # pyrefly: ignore [missing-import]
 from sqlalchemy.orm import relationship
 # pyrefly: ignore [missing-import]
@@ -154,3 +154,18 @@ class DocumentTextChunk(Base):
     raw_text = Column(Text, nullable=False)
 
     report = relationship("CorporateReport", back_populates="text_chunks")
+
+
+class SymbolScheduler(Base):
+    __tablename__ = "symbol_scheduler"
+    __table_args__ = (
+        UniqueConstraint('stocks_symbol', 'year', 'quarter', name='uq_symbol_year_quarter'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    stocks_symbol = Column(String(100), nullable=False)
+    year = Column(Integer, nullable=False, default=2020)
+    quarter = Column(Integer, nullable=False, default=4)
+    is_data_process = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())

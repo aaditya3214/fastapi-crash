@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import axios from 'axios';
 
 const API_BASE_URL = 'http://localhost:8080';
@@ -190,6 +190,166 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
   const [schedulerStatusData, setSchedulerStatusData] = useState(null);
   const [schedulerLoading, setSchedulerLoading] = useState(false);
   const dashboardSearchRef = useRef(null);
+
+  // Symbol Scheduler State
+  const [symbolSchedulerItems, setSymbolSchedulerItems] = useState([]);
+  const [loadingSchedulerItems, setLoadingSchedulerItems] = useState(false);
+  const [schedSymbol, setSchedSymbol] = useState('');
+  const [schedYear, setSchedYear] = useState('');
+  const [schedQuarter, setSchedQuarter] = useState('');
+  const [schedIsProcess, setSchedIsProcess] = useState(false);
+  const [schedSubmitting, setSchedSubmitting] = useState(false);
+  const [schedError, setSchedError] = useState(null);
+  const [showSchedSuggestions, setShowSchedSuggestions] = useState(false);
+  const [schedSelectedIndex, setSchedSelectedIndex] = useState(-1);
+  const [showQuarterSuggestions, setShowQuarterSuggestions] = useState(false);
+  const [quarterSelectedIndex, setQuarterSelectedIndex] = useState(-1);
+  const [deleteConfirmItem, setDeleteConfirmItem] = useState(null);
+  const schedSearchRef = useRef(null);
+  const schedYearRef = useRef(null);
+  const schedQuarterRef = useRef(null);
+  const quarterOptions = [1, 2, 3, 4];
+
+  const handleQuarterKeyDown = (e) => {
+    if (e.key === 'ArrowDown' && showQuarterSuggestions) {
+      e.preventDefault();
+      setQuarterSelectedIndex((prev) => (prev < quarterOptions.length - 1 ? prev + 1 : prev));
+    } else if (e.key === 'ArrowUp' && showQuarterSuggestions) {
+      e.preventDefault();
+      setQuarterSelectedIndex((prev) => (prev > 0 ? prev - 1 : 0));
+    } else if (e.key === 'Enter') {
+      if (showQuarterSuggestions && quarterSelectedIndex >= 0 && quarterOptions[quarterSelectedIndex]) {
+        e.preventDefault();
+        setSchedQuarter(quarterOptions[quarterSelectedIndex]);
+        setShowQuarterSuggestions(false);
+        setQuarterSelectedIndex(-1);
+      }
+      // Pressing enter on quarter submits form naturally
+    } else if (e.key === 'Escape') {
+      setShowQuarterSuggestions(false);
+    }
+  };
+
+  const handleYearKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (schedYearRef.current) {
+        schedQuarterRef.current?.focus();
+      }
+    }
+  };
+
+  const fetchSymbolSchedulerItems = async () => {
+    setLoadingSchedulerItems(true);
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/symbol-scheduler`);
+      setSymbolSchedulerItems(res.data?.data || []);
+    } catch (err) {
+      console.error('Failed to fetch symbol scheduler items:', err);
+    } finally {
+      setLoadingSchedulerItems(false);
+    }
+  };
+
+  const schedSuggestions = useMemo(() => {
+    if (!schedSymbol.trim()) return [];
+    const q = schedSymbol.toLowerCase().trim();
+    return stocks.filter(s =>
+      s.symbol.toLowerCase().includes(q) || (s.name && s.name.toLowerCase().includes(q))
+    ).slice(0, 8);
+  }, [schedSymbol, stocks]);
+
+  const handleSchedKeyDown = (e) => {
+    if (e.key === 'ArrowDown' && showSchedSuggestions && schedSuggestions.length > 0) {
+      e.preventDefault();
+      setSchedSelectedIndex((prev) => (prev < schedSuggestions.length - 1 ? prev + 1 : prev));
+    } else if (e.key === 'ArrowUp' && showSchedSuggestions && schedSuggestions.length > 0) {
+      e.preventDefault();
+      setSchedSelectedIndex((prev) => (prev > 0 ? prev - 1 : 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (showSchedSuggestions && schedSelectedIndex >= 0 && schedSuggestions[schedSelectedIndex]) {
+        setSchedSymbol(schedSuggestions[schedSelectedIndex].symbol);
+        setShowSchedSuggestions(false);
+        setSchedSelectedIndex(-1);
+      } else {
+        setShowSchedSuggestions(false);
+      }
+      // Focus move to Year input
+      setTimeout(() => {
+        schedYearRef.current?.focus();
+      }, 50);
+    } else if (e.key === 'Escape') {
+      setShowSchedSuggestions(false);
+    }
+  };
+
+  const handleCreateSymbolScheduler = async (e) => {
+    e.preventDefault();
+    const cleanSymbol = schedSymbol.toUpperCase().trim();
+    if (!cleanSymbol) {
+      setSchedError('Please enter or select a stock symbol.');
+      return;
+    }
+    if (!schedYear) {
+      setSchedError('Please enter a year.');
+      schedYearRef.current?.focus();
+      return;
+    }
+    if (!schedQuarter) {
+      setSchedError('Please enter or select a quarter (1-4).');
+      schedQuarterRef.current?.focus();
+      return;
+    }
+
+    // Client-side instant check for existing duplicate entry
+    const existing = symbolSchedulerItems.find(
+      item => item.stocks_symbol.toUpperCase() === cleanSymbol &&
+              parseInt(item.year) === parseInt(schedYear) &&
+              parseInt(item.quarter) === parseInt(schedQuarter)
+    );
+
+    if (existing) {
+      setSchedError(`A schedule entry for symbol '${cleanSymbol}' in year ${schedYear} (Q${schedQuarter}) already exists!`);
+      return;
+    }
+
+    setSchedSubmitting(true);
+    setSchedError(null);
+    try {
+      await axios.post(`${API_BASE_URL}/api/symbol-scheduler`, {
+        stocks_symbol: cleanSymbol,
+        year: parseInt(schedYear),
+        quarter: parseInt(schedQuarter),
+        is_data_process: schedIsProcess
+      });
+      setSchedSymbol('');
+      setSchedYear('');
+      setSchedQuarter('');
+      setSchedIsProcess(false);
+      setShowSchedSuggestions(false);
+      fetchSymbolSchedulerItems();
+    } catch (err) {
+      console.error('Failed to add symbol scheduler entry:', err);
+      const errMsg = err.response?.data?.detail || err.response?.data?.message || 'Failed to add symbol scheduler entry.';
+      setSchedError(errMsg);
+    } finally {
+      setSchedSubmitting(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmItem) return;
+    try {
+      await axios.delete(`${API_BASE_URL}/api/symbol-scheduler/${deleteConfirmItem.id}`);
+      setDeleteConfirmItem(null);
+      fetchSymbolSchedulerItems();
+    } catch (err) {
+      console.error('Failed to delete symbol scheduler entry:', err);
+    }
+  };
+
+
 
   const fetchSchedulerStatus = () => {
     setSchedulerLoading(true);
@@ -639,6 +799,11 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
     localStorage.setItem('market_dashboard_active_view', activeView);
     if (activeView === 'stocks') {
       fetchStocks();
+    } else if (activeView === 'symbol_scheduler') {
+      fetchSymbolSchedulerItems();
+      if (stocks.length === 0) {
+        fetchStocks();
+      }
     }
   }, [activeView]);
 
@@ -700,6 +865,15 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+      ),
+    },
+    {
+      id: 'symbol_scheduler',
+      label: 'Symbol Scheduler',
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
       ),
     },
@@ -1340,6 +1514,239 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
               )}
             </div>
           )}
+
+          {/* Symbol Scheduler View */}
+          {activeView === 'symbol_scheduler' && (
+            <div className="space-y-6 animate-fadeIn">
+              {/* Page Header */}
+              <div>
+                <h1 className="text-lg font-black text-slate-800">Symbol Scheduler</h1>
+                <p className="text-xs text-slate-400 mt-0.5">Manage stock scheduling targets, dynamic fiscal years, quarters, and process flags.</p>
+              </div>
+
+              {/* Form Section - Clean Light Monochromatic */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider mb-4">Add New Symbol Schedule</h3>
+                <form onSubmit={handleCreateSymbolScheduler} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                  <div ref={schedSearchRef} className="relative">
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Stocks Symbol</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. RELIANCE, TCS"
+                      value={schedSymbol}
+                      onChange={(e) => {
+                        setSchedSymbol(e.target.value);
+                        setShowSchedSuggestions(true);
+                        setSchedSelectedIndex(-1);
+                        setSchedError(null);
+                      }}
+                      onKeyDown={handleSchedKeyDown}
+                      onFocus={() => setShowSchedSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowSchedSuggestions(false), 200)}
+                      required
+                      className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-semibold focus:outline-none focus:border-slate-400 focus:bg-white transition-all placeholder:text-slate-400"
+                    />
+
+                    {/* Auto-Complete Suggestions Dropdown */}
+                    {showSchedSuggestions && schedSuggestions.length > 0 && (
+                      <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 max-h-64 overflow-y-auto divide-y divide-slate-100 animate-fadeIn">
+                        {schedSuggestions.map((item, idx) => (
+                          <div
+                            key={idx}
+                            onMouseDown={() => {
+                              setSchedSymbol(item.symbol);
+                              setShowSchedSuggestions(false);
+                              setSchedSelectedIndex(-1);
+                            }}
+                            className={`px-4 py-2.5 transition-all duration-150 cursor-pointer flex items-center justify-between group ${
+                              idx === schedSelectedIndex
+                                ? 'bg-slate-100 font-bold translate-x-1'
+                                : 'hover:bg-slate-50'
+                            }`}
+                          >
+                            <span className="text-xs font-black text-slate-800">{item.symbol}</span>
+                            <span className="text-[11px] font-semibold text-slate-400">{item.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Year</label>
+                    <input
+                      ref={schedYearRef}
+                      type="number"
+                      value={schedYear}
+                      placeholder="e.g. 2024"
+                      onChange={(e) => {
+                        setSchedYear(e.target.value);
+                        setSchedError(null);
+                      }}
+                      onKeyDown={handleYearKeyDown}
+                      required
+                      className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-semibold focus:outline-none focus:border-slate-400 focus:bg-white transition-all placeholder:text-slate-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                  </div>
+
+                  <div className="relative">
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Quarter (1 - 4)</label>
+                    <input
+                      ref={schedQuarterRef}
+                      type="number"
+                      min={1}
+                      max={4}
+                      value={schedQuarter}
+                      placeholder="e.g. 4"
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value);
+                        if (isNaN(val)) {
+                          setSchedQuarter('');
+                        } else if (val >= 1 && val <= 4) {
+                          setSchedQuarter(val);
+                        }
+                        setSchedError(null);
+                      }}
+                      onKeyDown={handleQuarterKeyDown}
+                      onFocus={() => setShowQuarterSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowQuarterSuggestions(false), 200)}
+                      required
+                      className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-semibold focus:outline-none focus:border-slate-400 focus:bg-white transition-all placeholder:text-slate-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+
+                    {/* Quarter Suggestions Dropdown */}
+                    {showQuarterSuggestions && (
+                      <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden divide-y divide-slate-100 animate-fadeIn">
+                        {quarterOptions.map((qVal, idx) => (
+                          <div
+                            key={qVal}
+                            onMouseDown={() => {
+                              setSchedQuarter(qVal);
+                              setShowQuarterSuggestions(false);
+                              setQuarterSelectedIndex(-1);
+                            }}
+                            className={`px-4 py-2.5 transition-all duration-150 cursor-pointer flex items-center justify-between group ${
+                              idx === quarterSelectedIndex || parseInt(schedQuarter) === qVal
+                                ? 'bg-slate-100 font-bold translate-x-1'
+                                : 'hover:bg-slate-50'
+                            }`}
+                          >
+                            <span className="text-xs font-black text-slate-800">Quarter {qVal} (Q{qVal})</span>
+                            <span className="text-[10px] font-bold text-slate-400">Select</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="flex items-center gap-2 cursor-pointer mb-2">
+                      <input
+                        type="checkbox"
+                        checked={schedIsProcess}
+                        onChange={(e) => setSchedIsProcess(e.target.checked)}
+                        className="w-4 h-4 rounded border-slate-300 text-slate-800 focus:ring-slate-400 cursor-pointer"
+                      />
+                      <span className="text-xs font-bold text-slate-700 select-none">Is Data Process</span>
+                    </label>
+                    <button
+                      type="submit"
+                      disabled={schedSubmitting}
+                      className="w-full px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      {schedSubmitting ? 'Saving...' : 'Add Schedule Entry'}
+                    </button>
+                  </div>
+                </form>
+
+                {/* Error Banner */}
+                {schedError && (
+                  <div className="mt-4 p-3 bg-slate-100 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 flex items-center justify-between animate-fadeIn">
+                    <span>⚠️ {schedError}</span>
+                    <button onClick={() => setSchedError(null)} className="text-slate-400 hover:text-slate-700 font-bold text-sm cursor-pointer ml-2">×</button>
+                  </div>
+                )}
+              </div>
+
+              {/* Data Table Section */}
+              {loadingSchedulerItems ? (
+                <div className="flex items-center justify-center py-20">
+                  <div className="flex gap-1.5">
+                    <span className="w-2.5 h-2.5 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                    <span className="w-2.5 h-2.5 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                    <span className="w-2.5 h-2.5 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100 bg-slate-50">
+                        <th className="text-left px-5 py-3.5 text-[11px] font-black text-slate-500 uppercase tracking-wider w-16">ID</th>
+                        <th className="text-left px-5 py-3.5 text-[11px] font-black text-slate-500 uppercase tracking-wider">Stocks Symbol</th>
+                        <th className="text-left px-5 py-3.5 text-[11px] font-black text-slate-500 uppercase tracking-wider">Year</th>
+                        <th className="text-left px-5 py-3.5 text-[11px] font-black text-slate-500 uppercase tracking-wider">Quarter</th>
+                        <th className="text-left px-5 py-3.5 text-[11px] font-black text-slate-500 uppercase tracking-wider">Is Data Process</th>
+                        <th className="text-left px-5 py-3.5 text-[11px] font-black text-slate-500 uppercase tracking-wider">Created At</th>
+                        <th className="text-left px-5 py-3.5 text-[11px] font-black text-slate-500 uppercase tracking-wider">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {symbolSchedulerItems.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="text-center py-10 text-xs text-slate-400 font-medium">
+                            No symbol scheduler entries found. Add your first entry above.
+                          </td>
+                        </tr>
+                      ) : (
+                        symbolSchedulerItems.map((item) => (
+                          <tr key={item.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
+                            <td className="px-5 py-3.5 text-slate-400 font-semibold text-xs">{item.id}</td>
+                            <td className="px-5 py-3.5">
+                              <span className="inline-block px-2.5 py-0.5 bg-slate-100 text-slate-800 rounded-lg text-xs font-black tracking-wide">
+                                {item.stocks_symbol}
+                              </span>
+                            </td>
+                            <td className="px-5 py-3.5 font-bold text-slate-700 text-xs">{item.year}</td>
+                            <td className="px-5 py-3.5 font-bold text-slate-700 text-xs">Q{item.quarter}</td>
+                            <td className="px-5 py-3.5">
+                              {item.is_data_process ? (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-xs font-bold">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-slate-700"></span>
+                                  True
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-slate-100 text-slate-500 border border-slate-200 rounded-lg text-xs font-bold">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                                  False
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-5 py-3.5 text-slate-400 text-xs font-medium">{formatDate(item.created_at)}</td>
+                            <td className="px-5 py-3.5">
+                              <button
+                                onClick={() => setDeleteConfirmItem(item)}
+                                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+
+                  {/* Footer count */}
+                  <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-400">{symbolSchedulerItems.length} scheduler entries total</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+
         </div>
       </main>
 
@@ -1715,6 +2122,48 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmItem && (
+        <div
+          onClick={() => setDeleteConfirmItem(null)}
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-xl border border-slate-100 relative text-left"
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-800 font-black text-sm">
+                !
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-slate-800">Confirm Deletion</h3>
+                <p className="text-[11px] font-semibold text-slate-400">Are you sure you want to proceed?</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 font-medium mb-5 leading-relaxed">
+              Are you sure you want to delete the schedule entry for <strong className="text-slate-900 font-black">{deleteConfirmItem.stocks_symbol}</strong> (Year: <strong className="text-slate-900">{deleteConfirmItem.year}</strong>, Quarter: <strong className="text-slate-900">Q{deleteConfirmItem.quarter}</strong>)?
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5">
+              <button
+                onClick={() => setDeleteConfirmItem(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+              >
+                Confirm Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

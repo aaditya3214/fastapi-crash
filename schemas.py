@@ -39,3 +39,20 @@ class StockData(BaseModel):
     status: str
     created_at: Any = None
     updated_at: Any = None
+
+class SymbolSchedulerCreate(BaseModel):
+    stocks_symbol: str
+    year: int = 2020
+    quarter: int = 4
+    is_data_process: bool = False
+
+class SymbolSchedulerResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    stocks_symbol: str
+    year: int
+    quarter: int
+    is_data_process: bool
+    created_at: Any = None
+    updated_at: Any = None

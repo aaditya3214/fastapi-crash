@@ -17,7 +17,7 @@ import models
 from crud import authenticate_user, create_user, get_user_by_username, update_user_password
 from database import Base, SessionLocal, engine
 from models import Stock
-from schemas import LoginRequest, StandardResponse, UserCreate, UserData, PasswordResetRequest, StockData
+from schemas import LoginRequest, StandardResponse, UserCreate, UserData, PasswordResetRequest, StockData, SymbolSchedulerCreate, SymbolSchedulerResponse
 
 
 # --- LIFESPAN (replaces deprecated @app.on_event) ---
@@ -192,6 +192,68 @@ def trigger_scheduler_job_now():
         return {"status": "success", "message": "Manual sync triggered successfully!", "data": get_scheduler_status()}
     except Exception as e:
         return {"status": "error", "message": str(e), "data": None}
+
+@app.get("/api/symbol-scheduler", response_model=StandardResponse)
+def get_symbol_schedulers(db: Session = Depends(get_db)):
+    try:
+        items = db.query(models.SymbolScheduler).order_by(models.SymbolScheduler.id.desc()).all()
+        data = [SymbolSchedulerResponse.model_validate(item) for item in items]
+        return StandardResponse(status="success", message="Symbol schedulers fetched successfully!", data=data)
+    except Exception as e:
+        return StandardResponse(status="error", message=str(e), data=[])
+
+@app.post("/api/symbol-scheduler", response_model=StandardResponse)
+def create_symbol_scheduler(payload: SymbolSchedulerCreate, db: Session = Depends(get_db)):
+    clean_symbol = payload.stocks_symbol.upper().strip()
+    existing = db.query(models.SymbolScheduler).filter(
+        models.SymbolScheduler.stocks_symbol == clean_symbol,
+        models.SymbolScheduler.year == payload.year,
+        models.SymbolScheduler.quarter == payload.quarter
+    ).first()
+
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"A schedule entry for symbol '{clean_symbol}' in year {payload.year} (Q{payload.quarter}) already exists!"
+        )
+
+    try:
+        new_item = models.SymbolScheduler(
+            stocks_symbol=clean_symbol,
+            year=payload.year,
+            quarter=payload.quarter,
+            is_data_process=payload.is_data_process
+        )
+        db.add(new_item)
+        db.commit()
+        db.refresh(new_item)
+        return StandardResponse(
+            status="success",
+            message="Symbol scheduler created successfully!",
+            data=SymbolSchedulerResponse.model_validate(new_item)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create symbol scheduler: {str(e)}")
+
+
+@app.delete("/api/symbol-scheduler/{item_id}", response_model=StandardResponse)
+def delete_symbol_scheduler(item_id: int, db: Session = Depends(get_db)):
+    try:
+        item = db.query(models.SymbolScheduler).filter(models.SymbolScheduler.id == item_id).first()
+        if not item:
+            raise HTTPException(status_code=404, detail="Symbol scheduler entry not found")
+        db.delete(item)
+        db.commit()
+        return StandardResponse(status="success", message="Symbol scheduler entry deleted successfully!", data={"id": item_id})
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete symbol scheduler: {str(e)}")
+
 
 @app.get("/stocks", response_model=StandardResponse)
 def get_stocks(db: Session = Depends(get_db)):
