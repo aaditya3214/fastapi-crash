@@ -237,6 +237,35 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
   const extrSymbolSearchRef = useRef(null);
   const extrYearRef = useRef(null);
   const extrQuarterRef = useRef(null);
+  const extrSymbolSuggestions = useMemo(() => {
+    if (!extractorSearchSymbol.trim()) return [];
+    const q = extractorSearchSymbol.toLowerCase().trim();
+    return stocks.filter(s =>
+      s.symbol.toLowerCase().includes(q) || (s.name && s.name.toLowerCase().includes(q))
+    ).slice(0, 8);
+  }, [extractorSearchSymbol, stocks]);
+
+  const handleExtrSymbolKeyDown = (e) => {
+    if (e.key === 'ArrowDown' && showExtrSymbolSuggestions && extrSymbolSuggestions.length > 0) {
+      e.preventDefault();
+      setExtrSymbolSelectedIndex((prev) => (prev < extrSymbolSuggestions.length - 1 ? prev + 1 : prev));
+    } else if (e.key === 'ArrowUp' && showExtrSymbolSuggestions && extrSymbolSuggestions.length > 0) {
+      e.preventDefault();
+      setExtrSymbolSelectedIndex((prev) => (prev > 0 ? prev - 1 : 0));
+    } else if (e.key === 'Enter') {
+      if (showExtrSymbolSuggestions && extrSymbolSelectedIndex >= 0 && extrSymbolSuggestions[extrSymbolSelectedIndex]) {
+        e.preventDefault();
+        setExtractorSearchSymbol(extrSymbolSuggestions[extrSymbolSelectedIndex].symbol);
+        setShowExtrSymbolSuggestions(false);
+        setExtrSymbolSelectedIndex(-1);
+        extrYearRef.current?.focus();
+      } else if (!showExtrSymbolSuggestions || extrSymbolSuggestions.length === 0) {
+        extrYearRef.current?.focus();
+      }
+    } else if (e.key === 'Escape') {
+      setShowExtrSymbolSuggestions(false);
+    }
+  };
 
   const handleExtrQuarterKeyDown = (e) => {
     if (e.key === 'ArrowDown' && showExtrQuarterSuggestions) {
@@ -1083,11 +1112,8 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
   };
 
   useEffect(() => {
-    if (activeView === 'stocks') {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      fetchStocks();
-    }
-  }, [activeView]);
+    fetchStocks();
+  }, []);
 
   const handleStockSelect = async (symbol) => {
     setSearchQuery(symbol);
@@ -2045,47 +2071,32 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                         onChange={(e) => {
                           setExtractorSearchSymbol(e.target.value);
                           setShowExtrSymbolSuggestions(true);
+                          setExtrSymbolSelectedIndex(-1);
                         }}
                         onFocus={() => setShowExtrSymbolSuggestions(true)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && extrSymbolSelectedIndex >= 0) {
-                            e.preventDefault();
-                            const filtered = stocks.filter(s =>
-                              s.symbol.toLowerCase().includes(extractorSearchSymbol.toLowerCase()) ||
-                              s.name.toLowerCase().includes(extractorSearchSymbol.toLowerCase())
-                            ).slice(0, 8);
-                            if (filtered[extrSymbolSelectedIndex]) {
-                              setExtractorSearchSymbol(filtered[extrSymbolSelectedIndex].symbol);
-                              setShowExtrSymbolSuggestions(false);
-                              extrYearRef.current?.focus();
-                            }
-                          } else if (e.key === 'Enter' && !showExtrSymbolSuggestions) {
-                            extrYearRef.current?.focus();
-                          }
-                        }}
+                        onBlur={() => setTimeout(() => setShowExtrSymbolSuggestions(false), 200)}
+                        onKeyDown={handleExtrSymbolKeyDown}
                         className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-400 transition-colors uppercase"
                       />
 
                       {/* Suggestions dropdown */}
-                      {showExtrSymbolSuggestions && extractorSearchSymbol.trim().length > 0 && (
-                        <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-30 max-h-48 overflow-y-auto">
-                          {stocks
-                            .filter(s => s.symbol.toLowerCase().includes(extractorSearchSymbol.toLowerCase()) || s.name.toLowerCase().includes(extractorSearchSymbol.toLowerCase()))
-                            .slice(0, 8)
-                            .map((item, idx) => (
-                              <div
-                                key={idx}
-                                onClick={() => {
-                                  setExtractorSearchSymbol(item.symbol);
-                                  setShowExtrSymbolSuggestions(false);
-                                  extrYearRef.current?.focus();
-                                }}
-                                className="px-3 py-2 hover:bg-slate-50 cursor-pointer flex justify-between items-center text-xs"
-                              >
-                                <span className="font-black text-slate-800">{item.symbol}</span>
-                                <span className="text-[10px] text-slate-400 font-semibold">{item.name}</span>
-                              </div>
-                            ))}
+                      {showExtrSymbolSuggestions && extrSymbolSuggestions.length > 0 && (
+                        <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-30 max-h-48 overflow-y-auto divide-y divide-slate-100 animate-fadeIn">
+                          {extrSymbolSuggestions.map((item, idx) => (
+                            <div
+                              key={idx}
+                              onMouseDown={() => {
+                                setExtractorSearchSymbol(item.symbol);
+                                setShowExtrSymbolSuggestions(false);
+                                setExtrSymbolSelectedIndex(-1);
+                                extrYearRef.current?.focus();
+                              }}
+                              className={`px-3.5 py-2 transition-all duration-150 cursor-pointer flex justify-between items-center text-xs group ${idx === extrSymbolSelectedIndex ? 'bg-slate-100 font-bold translate-x-1' : 'hover:bg-slate-50'}`}
+                            >
+                              <span className="font-black text-slate-800">{item.symbol}</span>
+                              <span className="text-[10px] text-slate-400 font-semibold">{item.name}</span>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
