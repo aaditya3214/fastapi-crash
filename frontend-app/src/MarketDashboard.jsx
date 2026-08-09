@@ -223,6 +223,132 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
   const [doclingCopySuccess, setDoclingCopySuccess] = useState(false);
   const [extractorSaveState, setExtractorSaveState] = useState('idle');
 
+  // Stock Search inside Stock Earning Extracter State
+  const [extractorSearchSymbol, setExtractorSearchSymbol] = useState('');
+  const [extractorSearchYear, setExtractorSearchYear] = useState('');
+  const [extractorSearchQuarter, setExtractorSearchQuarter] = useState('');
+  const [extractorSearchResults, setExtractorSearchResults] = useState(null);
+  const [extractorSearchLoading, setExtractorSearchLoading] = useState(false);
+  const [extractorSearchError, setExtractorSearchError] = useState(null);
+  const [showExtrSymbolSuggestions, setShowExtrSymbolSuggestions] = useState(false);
+  const [extrSymbolSelectedIndex, setExtrSymbolSelectedIndex] = useState(-1);
+  const [showExtrQuarterSuggestions, setShowExtrQuarterSuggestions] = useState(false);
+  const [extrQuarterSelectedIndex, setExtrQuarterSelectedIndex] = useState(-1);
+  const extrSymbolSearchRef = useRef(null);
+  const extrYearRef = useRef(null);
+  const extrQuarterRef = useRef(null);
+
+  const handleExtrQuarterKeyDown = (e) => {
+    if (e.key === 'ArrowDown' && showExtrQuarterSuggestions) {
+      e.preventDefault();
+      setExtrQuarterSelectedIndex((prev) => (prev < quarterOptions.length - 1 ? prev + 1 : prev));
+    } else if (e.key === 'ArrowUp' && showExtrQuarterSuggestions) {
+      e.preventDefault();
+      setExtrQuarterSelectedIndex((prev) => (prev > 0 ? prev - 1 : 0));
+    } else if (e.key === 'Enter') {
+      if (showExtrQuarterSuggestions && extrQuarterSelectedIndex >= 0 && quarterOptions[extrQuarterSelectedIndex]) {
+        e.preventDefault();
+        setExtractorSearchQuarter(`Q${quarterOptions[extrQuarterSelectedIndex]}`);
+        setShowExtrQuarterSuggestions(false);
+        setExtrQuarterSelectedIndex(-1);
+      } else {
+        setShowExtrQuarterSuggestions(false);
+        handleExtractorStockSearch(e);
+      }
+    } else if (e.key === 'Escape') {
+      setShowExtrQuarterSuggestions(false);
+    }
+  };
+
+  const handleExtractorStockSearch = async (e) => {
+    if (e) e.preventDefault();
+    if (!extractorSearchSymbol.trim()) return;
+
+    setExtractorSearchLoading(true);
+    setExtractorSearchError(null);
+    setExtractorSearchResults(null);
+    setShowExtrSymbolSuggestions(false);
+
+    try {
+      const cleanSym = extractorSearchSymbol.trim().toUpperCase();
+      const response = await axios.get(`${API_BASE_URL}/nse/search/${cleanSym}`);
+      if (response.data && response.data.data) {
+        const data = response.data.data;
+        let concalls = data.concalls || [];
+
+        if (extractorSearchYear.trim()) {
+          const yr = extractorSearchYear.trim();
+          concalls = concalls.filter(c => c.date && c.date.toLowerCase().includes(yr.toLowerCase()));
+        }
+
+        if (extractorSearchQuarter && extractorSearchQuarter.trim()) {
+          const rawStr = extractorSearchQuarter.trim().toLowerCase();
+          const digitsOnly = rawStr.replace(/[^0-9]/g, '');
+          const qVal = parseInt(digitsOnly);
+          concalls = concalls.filter(c => {
+            const dLower = (c.date || '').toLowerCase();
+            if (!isNaN(qVal) && qVal >= 1 && qVal <= 4) {
+              if (qVal === 1) return dLower.includes('q1') || dLower.includes('jun') || dLower.includes('jul') || dLower.includes('may');
+              if (qVal === 2) return dLower.includes('q2') || dLower.includes('sep') || dLower.includes('oct') || dLower.includes('aug');
+              if (qVal === 3) return dLower.includes('q3') || dLower.includes('dec') || dLower.includes('jan') || dLower.includes('nov');
+              if (qVal === 4) return dLower.includes('q4') || dLower.includes('mar') || dLower.includes('apr') || dLower.includes('feb');
+            }
+            return dLower.includes(rawStr);
+          });
+        }
+
+        setExtractorSearchResults({
+          company_name: data.company_name,
+          symbol: data.symbol,
+          concalls: concalls.length > 0 ? concalls : data.concalls || []
+        });
+      } else {
+        setExtractorSearchError(`No presentation records found for ${cleanSym}`);
+      }
+    } catch (err) {
+      console.error("Error searching stock presentations:", err);
+      setExtractorSearchError(err.response?.data?.detail || "Could not fetch stock presentation data.");
+    } finally {
+      setExtractorSearchLoading(false);
+    }
+  };
+
+  const handleExtractorViewConcallJson = async (concall, symbol) => {
+    if (!concall || !concall.ppt) return;
+    setExtractorLoading(true);
+    setExtractorError(null);
+    setExtractorSaveState('idle');
+
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/summarize-ppt?url=${encodeURIComponent(concall.ppt)}&symbol=${encodeURIComponent(symbol || '')}`);
+      if (response.data && response.data.data) {
+        const summaryPayload = response.data.data;
+        setExtractorSummary(summaryPayload);
+        setSelectedDoclingPage(1);
+
+        try {
+          await axios.post(`${API_BASE_URL}/api/save-concall-summary`, {
+            symbol: symbol || 'STOCK',
+            concall_period: concall.date,
+            ppt_url: concall.ppt,
+            summary_data: summaryPayload
+          });
+          setExtractorSaveState('saved');
+        } catch (saveErr) {
+          console.warn("Auto save after concall json extraction failed:", saveErr);
+        }
+      } else {
+        throw new Error('Invalid response structure from backend');
+      }
+    } catch (err) {
+      console.error("Concall JSON Extraction error:", err);
+      const errMsg = err.response?.data?.detail || 'Could not extract content from presentation file.';
+      setExtractorError(errMsg);
+    } finally {
+      setExtractorLoading(false);
+    }
+  };
+
   const handleExtractorFileUpload = async (fileToProcess) => {
     const targetFile = fileToProcess || extractorFile;
     if (!targetFile) return;
@@ -440,8 +566,8 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
     // Client-side instant check for existing duplicate entry
     const existing = symbolSchedulerItems.find(
       item => item.stocks_symbol.toUpperCase() === cleanSymbol &&
-              parseInt(item.year) === parseInt(schedYear) &&
-              parseInt(item.quarter) === parseInt(schedQuarter)
+        parseInt(item.year) === parseInt(schedYear) &&
+        parseInt(item.quarter) === parseInt(schedQuarter)
     );
 
     if (existing) {
@@ -1069,8 +1195,8 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                 onClick={() => setActiveView(item.id)}
                 title={!isSidebarOpen ? item.label : undefined}
                 className={`w-full flex items-center ${isSidebarOpen ? 'justify-start gap-3 px-3' : 'justify-center px-0'} py-2.5 rounded-xl font-semibold transition-all text-sm cursor-pointer ${activeView === item.id
-                    ? 'bg-slate-100 text-slate-900'
-                    : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                  ? 'bg-slate-100 text-slate-900'
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
                   }`}
               >
                 <span className={activeView === item.id ? 'text-slate-800' : 'text-slate-400'}>
@@ -1192,8 +1318,8 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                               setSelectedIndex(-1);
                             }}
                             className={`px-4 py-2.5 transition-all duration-200 ease-out cursor-pointer flex items-center justify-between group transform ${idx === selectedIndex
-                                ? 'bg-indigo-100/80 font-bold translate-x-1.5'
-                                : 'hover:bg-indigo-50/80 hover:translate-x-1.5'
+                              ? 'bg-indigo-100/80 font-bold translate-x-1.5'
+                              : 'hover:bg-indigo-50/80 hover:translate-x-1.5'
                               }`}
                           >
                             <div className="flex items-center gap-2.5">
@@ -1702,11 +1828,10 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                               setShowSchedSuggestions(false);
                               setSchedSelectedIndex(-1);
                             }}
-                            className={`px-4 py-2.5 transition-all duration-150 cursor-pointer flex items-center justify-between group ${
-                              idx === schedSelectedIndex
+                            className={`px-4 py-2.5 transition-all duration-150 cursor-pointer flex items-center justify-between group ${idx === schedSelectedIndex
                                 ? 'bg-slate-100 font-bold translate-x-1'
                                 : 'hover:bg-slate-50'
-                            }`}
+                              }`}
                           >
                             <span className="text-xs font-black text-slate-800">{item.symbol}</span>
                             <span className="text-[11px] font-semibold text-slate-400">{item.name}</span>
@@ -1769,11 +1894,10 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                               setShowQuarterSuggestions(false);
                               setQuarterSelectedIndex(-1);
                             }}
-                            className={`px-4 py-2.5 transition-all duration-150 cursor-pointer flex items-center justify-between group ${
-                              idx === quarterSelectedIndex || parseInt(schedQuarter) === qVal
+                            className={`px-4 py-2.5 transition-all duration-150 cursor-pointer flex items-center justify-between group ${idx === quarterSelectedIndex || parseInt(schedQuarter) === qVal
                                 ? 'bg-slate-100 font-bold translate-x-1'
                                 : 'hover:bg-slate-50'
-                            }`}
+                              }`}
                           >
                             <span className="text-xs font-black text-slate-800">Quarter {qVal} (Q{qVal})</span>
                             <span className="text-[10px] font-bold text-slate-400">Select</span>
@@ -1901,6 +2025,215 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                 </p>
               </div>
 
+              {/* Search Stock Presentation Section */}
+              {!extractorSummary && !extractorLoading && (
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider">Search Stock Presentation (Symbol, Year, Quarter)</h3>
+                    <span className="text-[11px] font-semibold text-slate-400">1-Click Fetch & View Extracted JSON Data</span>
+                  </div>
+
+                  <form onSubmit={handleExtractorStockSearch} className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    {/* Stock Symbol Input */}
+                    <div className="relative">
+                      <label className="block text-[10px] font-extrabold uppercase text-slate-400 mb-1">Stock Symbol</label>
+                      <input
+                        ref={extrSymbolSearchRef}
+                        type="text"
+                        placeholder="e.g. RELIANCE, TRENT, WIPRO..."
+                        value={extractorSearchSymbol}
+                        onChange={(e) => {
+                          setExtractorSearchSymbol(e.target.value);
+                          setShowExtrSymbolSuggestions(true);
+                        }}
+                        onFocus={() => setShowExtrSymbolSuggestions(true)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && extrSymbolSelectedIndex >= 0) {
+                            e.preventDefault();
+                            const filtered = stocks.filter(s =>
+                              s.symbol.toLowerCase().includes(extractorSearchSymbol.toLowerCase()) ||
+                              s.name.toLowerCase().includes(extractorSearchSymbol.toLowerCase())
+                            ).slice(0, 8);
+                            if (filtered[extrSymbolSelectedIndex]) {
+                              setExtractorSearchSymbol(filtered[extrSymbolSelectedIndex].symbol);
+                              setShowExtrSymbolSuggestions(false);
+                              extrYearRef.current?.focus();
+                            }
+                          } else if (e.key === 'Enter' && !showExtrSymbolSuggestions) {
+                            extrYearRef.current?.focus();
+                          }
+                        }}
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-400 transition-colors uppercase"
+                      />
+
+                      {/* Suggestions dropdown */}
+                      {showExtrSymbolSuggestions && extractorSearchSymbol.trim().length > 0 && (
+                        <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-30 max-h-48 overflow-y-auto">
+                          {stocks
+                            .filter(s => s.symbol.toLowerCase().includes(extractorSearchSymbol.toLowerCase()) || s.name.toLowerCase().includes(extractorSearchSymbol.toLowerCase()))
+                            .slice(0, 8)
+                            .map((item, idx) => (
+                              <div
+                                key={idx}
+                                onClick={() => {
+                                  setExtractorSearchSymbol(item.symbol);
+                                  setShowExtrSymbolSuggestions(false);
+                                  extrYearRef.current?.focus();
+                                }}
+                                className="px-3 py-2 hover:bg-slate-50 cursor-pointer flex justify-between items-center text-xs"
+                              >
+                                <span className="font-black text-slate-800">{item.symbol}</span>
+                                <span className="text-[10px] text-slate-400 font-semibold">{item.name}</span>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Year Input */}
+                    <div>
+                      <label className="block text-[10px] font-extrabold uppercase text-slate-400 mb-1">Year</label>
+                      <input
+                        ref={extrYearRef}
+                        type="text"
+                        placeholder="e.g. 2026"
+                        value={extractorSearchYear}
+                        onChange={(e) => setExtractorSearchYear(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            extrQuarterRef.current?.focus();
+                          }
+                        }}
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-400 transition-colors"
+                      />
+                    </div>
+
+                    {/* Quarter Input (1 - 4) */}
+                    <div className="relative">
+                      <label className="block text-[10px] font-extrabold uppercase text-slate-400 mb-1">QUARTER (1 - 4)</label>
+                      <input
+                        ref={extrQuarterRef}
+                        type="text"
+                        placeholder="e.g. Q4"
+                        value={extractorSearchQuarter}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (!val) {
+                            setExtractorSearchQuarter('');
+                          } else if (val === '1' || val === '2' || val === '3' || val === '4') {
+                            setExtractorSearchQuarter(`Q${val}`);
+                          } else {
+                            setExtractorSearchQuarter(val);
+                          }
+                        }}
+                        onFocus={() => setShowExtrQuarterSuggestions(true)}
+                        onBlur={() => setTimeout(() => setShowExtrQuarterSuggestions(false), 200)}
+                        onKeyDown={handleExtrQuarterKeyDown}
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-400 transition-colors uppercase"
+                      />
+
+                      {/* Quarter Suggestions Dropdown */}
+                      {showExtrQuarterSuggestions && (
+                        <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-30 overflow-hidden divide-y divide-slate-100 animate-fadeIn">
+                          {quarterOptions.map((qVal, idx) => {
+                            const qFormatted = `Q${qVal}`;
+                            const isSelected = idx === extrQuarterSelectedIndex || extractorSearchQuarter === qFormatted || extractorSearchQuarter === `${qVal}`;
+                            return (
+                              <div
+                                key={qVal}
+                                onMouseDown={() => {
+                                  setExtractorSearchQuarter(qFormatted);
+                                  setShowExtrQuarterSuggestions(false);
+                                  setExtrQuarterSelectedIndex(-1);
+                                }}
+                                className={`px-3.5 py-2 transition-all duration-150 cursor-pointer flex items-center justify-between group ${isSelected ? 'bg-slate-100 font-bold translate-x-1' : 'hover:bg-slate-50'}`}
+                              >
+                                <span className="text-xs font-black text-slate-800">Quarter {qVal} ({qFormatted})</span>
+                                <span className="text-[10px] font-bold text-slate-400">Select</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Search Button */}
+                    <div className="flex items-end">
+                      <button
+                        type="submit"
+                        disabled={extractorSearchLoading}
+                        className="w-full py-2.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 font-black rounded-xl text-xs transition-all cursor-pointer shadow-xs active:scale-95 flex items-center justify-center gap-1.5"
+                      >
+                        {extractorSearchLoading ? '⏳ Searching...' : '🔍 Search Presentations'}
+                      </button>
+                    </div>
+                  </form>
+
+                  {/* Search Results Display */}
+                  {extractorSearchError && (
+                    <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-rose-700 text-xs font-bold animate-fadeIn">
+                      ⚠️ {extractorSearchError}
+                    </div>
+                  )}
+
+                  {extractorSearchResults && (
+                    <div className="pt-2 border-t border-slate-100 space-y-3 animate-fadeIn">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-black text-slate-800">
+                          Presentations for {extractorSearchResults.company_name} ({extractorSearchResults.symbol})
+                        </h4>
+                        <span className="text-[11px] font-bold text-slate-400">
+                          {extractorSearchResults.concalls?.length || 0} period(s) found
+                        </span>
+                      </div>
+
+                      <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                        <table className="w-full text-xs text-left">
+                          <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px]">
+                            <tr>
+                              <th className="px-4 py-2.5">Concall Period</th>
+                              <th className="px-4 py-2.5 text-center">Presentation Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 bg-white">
+                            {(extractorSearchResults.concalls || []).map((concall, idx) => (
+                              <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
+                                <td className="px-4 py-3 font-bold text-slate-800">{concall.date}</td>
+                                <td className="px-4 py-3 text-center">
+                                  <div className="flex items-center justify-center gap-2">
+                                    {concall.ppt ? (
+                                      <>
+                                        <a
+                                          href={getDownloadProxyUrl(concall.ppt)}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-100 rounded-xl text-xs font-black transition-all shadow-xs"
+                                        >
+                                          Download PPT 📥
+                                        </a>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleExtractorViewConcallJson(concall, extractorSearchResults.symbol)}
+                                          className="inline-flex items-center gap-1 px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs active:scale-95"
+                                        >
+                                          🔍 View Extracted JSON Data
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <span className="text-slate-300 text-xs font-semibold">Not Available</span>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Upload Dropzone Container */}
               {!extractorSummary && !extractorLoading && (
                 <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5">
@@ -1912,11 +2245,10 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                     onDragOver={handleExtractorDrag}
                     onDragLeave={handleExtractorDrag}
                     onDrop={handleExtractorDrop}
-                    className={`flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-2xl py-12 px-6 cursor-pointer transition-all duration-200 ${
-                      extractorDragActive
+                    className={`flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-2xl py-12 px-6 cursor-pointer transition-all duration-200 ${extractorDragActive
                         ? "border-slate-800 bg-slate-100/80 scale-[1.01]"
                         : "border-slate-300 bg-slate-50/60 hover:border-slate-500 hover:bg-slate-50"
-                    }`}
+                      }`}
                   >
                     <div className="w-14 h-14 rounded-2xl bg-white border border-slate-200 flex items-center justify-center shadow-xs">
                       <svg className="w-7 h-7 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
@@ -1993,79 +2325,127 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                 </div>
               )}
 
-              {/* Extracted Results View - Docling JSON Data Only */}
+              {/* Extracted Results View */}
               {extractorSummary && !extractorLoading && (
                 <div className="space-y-6 animate-fadeIn">
-                  {/* Docling Page-by-Page Clean JSON Section */}
-                  {extractorSummary.docling_json_data && (
-                    <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
-                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-3 border-b border-slate-150 gap-2">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="px-2.5 py-0.5 bg-slate-900 text-white rounded text-[10px] font-black uppercase tracking-wider">
-                            Docling Engine
-                          </span>
-                          <h4 className="text-xs font-black text-slate-800">
-                            Extracted JSON Data ({extractorSummary.docling_json_data.total_pages || 0} Pages)
-                          </h4>
+                  {/* Action Bar & Metadata Header */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-0.5 bg-slate-100 text-slate-800 border border-slate-200 rounded text-[10px] font-black uppercase tracking-wider">
+                          Extracted Earnings Analysis
+                        </span>
+                        <h2 className="text-base font-black text-slate-900">
+                          {extractorSummary.title || extractorSummary.filename || 'Presentation Extraction'}
+                        </h2>
+                      </div>
+                      <p className="text-xs text-slate-400 font-semibold mt-1">
+                        {extractorSummary.filename || 'Uploaded Document'} · {extractorSummary.file_type || 'PDF'} · {extractorSummary.pages_or_slides || '?'} pages processed
+                      </p>
+                    </div>
 
-                          <div className="flex items-center gap-1.5 ml-2">
-                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Select Page:</span>
-                            <select
-                              value={selectedDoclingPage}
-                              onChange={(e) => setSelectedDoclingPage(Number(e.target.value))}
-                              className="px-3 py-1 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-800 focus:outline-none focus:border-slate-400 cursor-pointer shadow-2xs"
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={handleExtractorExportPdf}
+                        className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300/80 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
+                      >
+                        📄 Download PDF Report
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleExtractorExportJson}
+                        className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300/80 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
+                      >
+                        📊 Download JSON Data
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleExtractorSaveToDb}
+                        disabled={extractorSaveState === 'saving'}
+                        className={`px-3.5 py-2 font-bold rounded-xl text-xs transition-all cursor-pointer shadow-sm flex items-center gap-1.5 border border-slate-300/80 ${extractorSaveState === 'saved'
+                            ? 'bg-slate-200 text-slate-900 border-slate-400'
+                            : extractorSaveState === 'saving'
+                              ? 'bg-slate-150 text-slate-600'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-800'
+                          }`}
+                      >
+                        {extractorSaveState === 'saved' ? '✓ Saved to Database' : extractorSaveState === 'saving' ? '⏳ Saving...' : '💾 Save to DB'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setExtractorSummary(null); setExtractorFile(null); }}
+                        className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl text-xs transition-all cursor-pointer"
+                      >
+                        Upload Another
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Render Extracted Page-by-Page Docling JSON Data */}
+                  <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+
+                    {/* Docling Page-by-Page Clean JSON Section */}
+                    {extractorSummary.docling_json_data && (
+                      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-3 border-b border-slate-150 gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="px-2.5 py-0.5 bg-slate-900 text-white rounded text-[10px] font-black uppercase tracking-wider">
+                              Docling Engine
+                            </span>
+                            <h4 className="text-xs font-black text-slate-800">
+                              Extracted JSON Data ({extractorSummary.docling_json_data.total_pages || 0} Pages)
+                            </h4>
+
+                            <div className="flex items-center gap-1.5 ml-2">
+                              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Select Page:</span>
+                              <select
+                                value={selectedDoclingPage}
+                                onChange={(e) => setSelectedDoclingPage(Number(e.target.value))}
+                                className="px-3 py-1 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-800 focus:outline-none focus:border-slate-400 cursor-pointer shadow-2xs"
+                              >
+                                {(extractorSummary.docling_json_data.pages_data || []).map((p) => (
+                                  <option key={p.page_number} value={p.page_number}>
+                                    Page {p.page_number}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={handleExtractorExportJson}
+                              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300/80 font-extrabold rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95"
                             >
-                              {(extractorSummary.docling_json_data.pages_data || []).map((p) => (
-                                <option key={p.page_number} value={p.page_number}>
-                                  Page {p.page_number}
-                                </option>
-                              ))}
-                            </select>
+                              📊 Download JSON File
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  const area = document.getElementById('docling-complete-json-textarea');
+                                  if (area) {
+                                    area.select();
+                                    await navigator.clipboard.writeText(area.value);
+                                  }
+                                  setDoclingCopySuccess(true);
+                                  setTimeout(() => setDoclingCopySuccess(false), 2000);
+                                } catch (cErr) {
+                                  console.error('Clipboard copy failed:', cErr);
+                                }
+                              }}
+                              className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs flex items-center gap-1.5 border border-slate-300/80 ${doclingCopySuccess
+                                  ? 'bg-slate-200 text-slate-900 border-slate-400 scale-95'
+                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-800 active:scale-95'
+                                }`}
+                            >
+                              {doclingCopySuccess ? '✓ Copied Page JSON!' : '📋 Copy Page JSON'}
+                            </button>
                           </div>
                         </div>
-
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <button
-                            type="button"
-                            onClick={handleExtractorExportJson}
-                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300/80 font-extrabold rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95"
-                          >
-                            📊 Download JSON File
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              try {
-                                const area = document.getElementById('docling-complete-json-textarea');
-                                if (area) {
-                                  area.select();
-                                  await navigator.clipboard.writeText(area.value);
-                                }
-                                setDoclingCopySuccess(true);
-                                setTimeout(() => setDoclingCopySuccess(false), 2000);
-                              } catch (cErr) {
-                                console.error('Clipboard copy failed:', cErr);
-                              }
-                            }}
-                            className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs flex items-center gap-1.5 border border-slate-300/80 ${
-                              doclingCopySuccess
-                                ? 'bg-slate-200 text-slate-900 border-slate-400 scale-95'
-                                : 'bg-slate-100 hover:bg-slate-200 text-slate-800 active:scale-95'
-                            }`}
-                          >
-                            {doclingCopySuccess ? '✓ Copied Page JSON!' : '📋 Copy Page JSON'}
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => { setExtractorSummary(null); setExtractorFile(null); }}
-                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-300/80 font-extrabold rounded-xl text-xs transition-all cursor-pointer shadow-xs active:scale-95"
-                          >
-                            Upload Another
-                          </button>
-                        </div>
-                      </div>
 
                         {/* Search Filter Across Current Page JSON */}
                         <div>
@@ -2122,6 +2502,7 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                         })()}
                       </div>
                     )}
+                  </div>
                 </div>
               )}
             </div>
@@ -2257,10 +2638,10 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                                 type="button"
                                 onClick={() => handleSaveToDb(concall)}
                                 className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shadow-md hover:shadow-lg active:scale-95 ${savedDbStates[concall.ppt || concall.date] === 'saved'
-                                    ? 'bg-emerald-600 text-white'
-                                    : savedDbStates[concall.ppt || concall.date] === 'saving'
-                                      ? 'bg-amber-500 text-white'
-                                      : 'bg-cyan-600 hover:bg-cyan-700 text-white'
+                                  ? 'bg-emerald-600 text-white'
+                                  : savedDbStates[concall.ppt || concall.date] === 'saving'
+                                    ? 'bg-amber-500 text-white'
+                                    : 'bg-cyan-600 hover:bg-cyan-700 text-white'
                                   }`}
                               >
                                 {savedDbStates[concall.ppt || concall.date] === 'saved'
@@ -2365,8 +2746,8 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                   onDragLeave={handleDrag}
                   onDrop={handleDrop}
                   className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl py-6 px-4 cursor-pointer transition-all ${dragActive
-                      ? "border-indigo-500 bg-indigo-50"
-                      : "border-indigo-200 bg-white hover:border-indigo-400 hover:bg-indigo-50/50"
+                    ? "border-indigo-500 bg-indigo-50"
+                    : "border-indigo-200 bg-white hover:border-indigo-400 hover:bg-indigo-50/50"
                     }`}
                 >
                   <span className="text-3xl">☁️</span>
@@ -2400,7 +2781,7 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
       {isSchedulerModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn select-none">
           <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-lg w-full p-6 space-y-5 relative text-slate-800">
-            
+
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2.5">
