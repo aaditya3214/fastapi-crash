@@ -210,6 +210,140 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
   const schedQuarterRef = useRef(null);
   const quarterOptions = [1, 2, 3, 4];
 
+  // Stock Earning Extracter State
+  const [extractorFile, setExtractorFile] = useState(null);
+  const [extractorSummary, setExtractorSummary] = useState(null);
+  const [extractorLoading, setExtractorLoading] = useState(false);
+  const [extractorError, setExtractorError] = useState(null);
+  const [extractorDragActive, setExtractorDragActive] = useState(false);
+  const [extractorJsonViewMode, setExtractorJsonViewMode] = useState('grid');
+  const [extractorJsonSearchQuery, setExtractorJsonSearchQuery] = useState('');
+  const [extractorSaveState, setExtractorSaveState] = useState('idle');
+
+  const handleExtractorFileUpload = async (fileToProcess) => {
+    const targetFile = fileToProcess || extractorFile;
+    if (!targetFile) return;
+
+    setExtractorLoading(true);
+    setExtractorError(null);
+    setExtractorSaveState('idle');
+    try {
+      const formData = new FormData();
+      formData.append('file', targetFile);
+      const res = await axios.post(`${API_BASE_URL}/api/summarize-uploaded-pdf`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      const summaryPayload = res.data.data;
+      setExtractorSummary(summaryPayload);
+
+      // Auto Save to Database
+      try {
+        await axios.post(`${API_BASE_URL}/api/save-concall-summary`, {
+          symbol: summaryPayload.symbol || 'PRESENTATION',
+          concall_period: summaryPayload.quarterFy || 'Q1 FY27',
+          ppt_url: '',
+          summary_data: summaryPayload
+        });
+        setExtractorSaveState('saved');
+      } catch (saveErr) {
+        console.warn("Auto save after extraction failed:", saveErr);
+      }
+    } catch (err) {
+      console.error("Extraction error:", err);
+      const errMsg = err.response?.data?.detail || 'Could not extract content from file. The document may be corrupted or unreadable.';
+      setExtractorError(errMsg);
+    } finally {
+      setExtractorLoading(false);
+    }
+  };
+
+  const handleExtractorDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setExtractorDragActive(true);
+    } else if (e.type === "dragleave") {
+      setExtractorDragActive(false);
+    }
+  };
+
+  const handleExtractorDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setExtractorDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      setExtractorFile(file);
+      await handleExtractorFileUpload(file);
+    }
+  };
+
+  const handleExtractorExportPdf = async () => {
+    if (!extractorSummary) return;
+    try {
+      const res = await axios.post(`${API_BASE_URL}/api/export-summary-pdf`, {
+        title: extractorSummary.title || 'Stock_Earnings_Extraction_Report',
+        markdown_report: extractorSummary.markdown_report || '',
+        key_value_pairs: extractorSummary.key_value_pairs || {},
+        filename: extractorSummary.filename || 'Extracted_Earnings_Report'
+      }, { responseType: 'blob' });
+
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const rawName = extractorSummary.filename || extractorSummary.title || 'Extracted_Earnings_Report';
+      const cleanBaseName = rawName.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9_-]/g, "_");
+      link.setAttribute('download', `${cleanBaseName}_Extracted.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('PDF Export failed:', err);
+    }
+  };
+
+  const handleExtractorExportJson = () => {
+    if (!extractorSummary) return;
+    const title = extractorSummary.title || 'Extracted_Earnings_Data';
+    const jsonData = {
+      title: extractorSummary.title,
+      filename: extractorSummary.filename,
+      key_numbers: extractorSummary.key_numbers,
+      key_value_pairs: extractorSummary.key_value_pairs,
+      pymupdf_json_data: extractorSummary.pymupdf_json_data,
+      sections: extractorSummary.sections,
+      markdown_report: extractorSummary.markdown_report
+    };
+
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(jsonData, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `${title.replace(/[^a-zA-Z0-9_-]/g, '_')}_PyMuPDF.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
+  const handleExtractorSaveToDb = async () => {
+    if (!extractorSummary) return;
+    setExtractorSaveState('saving');
+    try {
+      await axios.post(`${API_BASE_URL}/api/save-concall-summary`, {
+        symbol: extractorSummary.symbol || 'STOCK',
+        concall_period: extractorSummary.quarterFy || 'Q1 FY27',
+        ppt_url: '',
+        summary_data: extractorSummary
+      });
+      setExtractorSaveState('saved');
+    } catch (err) {
+      console.error("Save to DB failed:", err);
+      setExtractorSaveState('error');
+    }
+  };
+
+
   const handleQuarterKeyDown = (e) => {
     if (e.key === 'ArrowDown' && showQuarterSuggestions) {
       e.preventDefault();
@@ -874,6 +1008,15 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+      ),
+    },
+    {
+      id: 'stock_earning_extracter',
+      label: 'Stock Earning Extracter',
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
         </svg>
       ),
     },
@@ -1745,6 +1888,311 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
               )}
             </div>
           )}
+
+          {/* Stock Earning Extracter View */}
+          {activeView === 'stock_earning_extracter' && (
+            <div className="space-y-6 animate-fadeIn">
+              {/* Page Header */}
+              <div>
+                <h1 className="text-lg font-black text-slate-800">Stock Earning Extracter</h1>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Upload downloaded stock earnings presentation files (PDF / PPTX) for instant 1-click AI extraction, PyMuPDF financial data parsing, and auto-database sync.
+                </p>
+              </div>
+
+              {/* Upload Dropzone Container */}
+              {!extractorSummary && !extractorLoading && (
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5">
+                  <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider">Upload Presentation Document</h3>
+
+                  <label
+                    htmlFor="stock-earning-extractor-file-input"
+                    onDragEnter={handleExtractorDrag}
+                    onDragOver={handleExtractorDrag}
+                    onDragLeave={handleExtractorDrag}
+                    onDrop={handleExtractorDrop}
+                    className={`flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-2xl py-12 px-6 cursor-pointer transition-all duration-200 ${
+                      extractorDragActive
+                        ? "border-slate-800 bg-slate-100/80 scale-[1.01]"
+                        : "border-slate-300 bg-slate-50/60 hover:border-slate-500 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="w-14 h-14 rounded-2xl bg-white border border-slate-200 flex items-center justify-center shadow-xs">
+                      <svg className="w-7 h-7 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                    </div>
+
+                    <div className="text-center space-y-1">
+                      <p className="text-xs font-black text-slate-800">
+                        {extractorFile ? extractorFile.name : (extractorDragActive ? "Drop presentation file here!" : "Click to select or drag & drop presentation file")}
+                      </p>
+                      <p className="text-[11px] text-slate-400 font-semibold">
+                        {extractorFile ? `${(extractorFile.size / (1024 * 1024)).toFixed(2)} MB · Ready for extraction` : "Supports PDF and PPTX presentation files"}
+                      </p>
+                    </div>
+
+                    <input
+                      id="stock-earning-extractor-file-input"
+                      type="file"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setExtractorFile(file);
+                          await handleExtractorFileUpload(file);
+                        }
+                      }}
+                    />
+                  </label>
+
+                  {extractorFile && (
+                    <div className="flex items-center justify-between pt-2">
+                      <span className="text-xs font-bold text-slate-600">Selected File: <strong className="text-slate-900">{extractorFile.name}</strong></span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => { setExtractorFile(null); setExtractorError(null); }}
+                          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleExtractorFileUpload(extractorFile)}
+                          className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-black transition-all cursor-pointer shadow-sm active:scale-95"
+                        >
+                          ⚡ Extract Earnings Data
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {extractorError && (
+                    <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-rose-700 text-xs font-bold flex items-center justify-between animate-fadeIn">
+                      <span>⚠️ {extractorError}</span>
+                      <button onClick={() => setExtractorError(null)} className="text-slate-400 hover:text-slate-700 font-bold text-sm cursor-pointer ml-2">×</button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Extraction Processing State */}
+              {extractorLoading && (
+                <div className="bg-white p-12 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center justify-center gap-4 text-center">
+                  <div className="flex gap-1.5">
+                    <span className="w-3 h-3 bg-slate-800 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                    <span className="w-3 h-3 bg-slate-800 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                    <span className="w-3 h-3 bg-slate-800 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-800">Processing Presentation Document...</h3>
+                    <p className="text-xs text-slate-400 font-semibold mt-1">Running PyMuPDF text & financial table extraction + AI earnings analysis...</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Extracted Results View */}
+              {extractorSummary && !extractorLoading && (
+                <div className="space-y-6 animate-fadeIn">
+                  {/* Action Bar & Metadata Header */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-0.5 bg-slate-100 text-slate-800 border border-slate-200 rounded text-[10px] font-black uppercase tracking-wider">
+                          Extracted Earnings Analysis
+                        </span>
+                        <h2 className="text-base font-black text-slate-900">
+                          {extractorSummary.title || extractorSummary.filename || 'Presentation Extraction'}
+                        </h2>
+                      </div>
+                      <p className="text-xs text-slate-400 font-semibold mt-1">
+                        {extractorSummary.filename || 'Uploaded Document'} · {extractorSummary.file_type || 'PDF'} · {extractorSummary.pages_or_slides || '?'} pages processed
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={handleExtractorExportPdf}
+                        className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300/80 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
+                      >
+                        📄 Download PDF Report
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleExtractorExportJson}
+                        className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300/80 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
+                      >
+                        📊 Download JSON Data
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleExtractorSaveToDb}
+                        disabled={extractorSaveState === 'saving'}
+                        className={`px-3.5 py-2 font-bold rounded-xl text-xs transition-all cursor-pointer shadow-sm flex items-center gap-1.5 ${
+                          extractorSaveState === 'saved'
+                            ? 'bg-emerald-600 text-white'
+                            : extractorSaveState === 'saving'
+                              ? 'bg-amber-500 text-white'
+                              : 'bg-slate-800 hover:bg-slate-900 text-white'
+                        }`}
+                      >
+                        {extractorSaveState === 'saved' ? '✓ Saved to Database' : extractorSaveState === 'saving' ? '⏳ Saving...' : '💾 Save to DB'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setExtractorSummary(null); setExtractorFile(null); }}
+                        className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl text-xs transition-all cursor-pointer"
+                      >
+                        Upload Another
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Render Extracted Report Body */}
+                  <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+                    {extractorSummary.markdown_report ? (
+                      renderMarkdown(extractorSummary.markdown_report)
+                    ) : (
+                      <>
+                        {/* Key Numbers */}
+                        {extractorSummary.key_numbers && extractorSummary.key_numbers.length > 0 && (
+                          <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+                            <span className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">Key Figures Identified</span>
+                            <div className="flex flex-wrap gap-2">
+                              {extractorSummary.key_numbers.map((num, i) => (
+                                <span key={i} className="px-2.5 py-1 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-800 shadow-xs">{num}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {/* Key-Value Pairs Extraction Section */}
+                    {extractorSummary.key_value_pairs && Object.keys(extractorSummary.key_value_pairs).length > 0 && (
+                      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-3">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-3 border-b border-slate-150 gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded text-[10px] font-black uppercase tracking-wider">
+                              PyMuPDF Complete Extraction
+                            </span>
+                            <h4 className="text-xs font-black text-slate-800">Extracted Key-Value Parameters</h4>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-[10px] text-slate-400 font-bold">
+                              {Object.keys(extractorSummary.key_value_pairs).length} fields extracted
+                            </span>
+                            <div className="flex items-center bg-slate-100 rounded-lg p-0.5 border border-slate-200">
+                              <button
+                                onClick={() => setExtractorJsonViewMode('grid')}
+                                className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                                  extractorJsonViewMode === 'grid' ? 'bg-white text-slate-900 border border-slate-200 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'
+                                }`}
+                              >
+                                Grid View
+                              </button>
+                              <button
+                                onClick={() => setExtractorJsonViewMode('raw')}
+                                className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                                  extractorJsonViewMode === 'raw' ? 'bg-white text-slate-900 border border-slate-200 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'
+                                }`}
+                              >
+                                Raw JSON
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Search Filter for Key-Value Pairs */}
+                        <div>
+                          <input
+                            type="text"
+                            placeholder="Filter extracted fields (e.g. Revenue, EBITDA, PAT, EPS)..."
+                            value={extractorJsonSearchQuery}
+                            onChange={(e) => setExtractorJsonSearchQuery(e.target.value)}
+                            className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-400 focus:bg-white transition-colors"
+                          />
+                        </div>
+
+                        {extractorJsonViewMode === 'grid' ? (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-96 overflow-y-auto pr-1 custom-scrollbar-light">
+                            {Object.entries(extractorSummary.key_value_pairs)
+                              .filter(([k, v]) =>
+                                !extractorJsonSearchQuery ||
+                                k.toLowerCase().includes(extractorJsonSearchQuery.toLowerCase()) ||
+                                String(v).toLowerCase().includes(extractorJsonSearchQuery.toLowerCase())
+                              )
+                              .map(([key, val], idx) => (
+                                <div key={idx} className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-col justify-between gap-1 hover:bg-slate-100/80 transition-colors">
+                                  <span className="text-[10px] text-slate-500 font-bold uppercase truncate" title={key}>{key}</span>
+                                  <span className="text-xs font-black text-slate-900 break-words">{String(val)}</span>
+                                </div>
+                              ))}
+                          </div>
+                        ) : (
+                          <pre className="text-xs text-slate-800 font-mono bg-slate-50 p-4 rounded-xl border border-slate-200 max-h-96 overflow-auto whitespace-pre-wrap select-all custom-scrollbar-light">
+                            {JSON.stringify(
+                              extractorJsonSearchQuery
+                                ? Object.fromEntries(
+                                  Object.entries(extractorSummary.key_value_pairs).filter(([k, v]) =>
+                                    k.toLowerCase().includes(extractorJsonSearchQuery.toLowerCase()) ||
+                                    String(v).toLowerCase().includes(extractorJsonSearchQuery.toLowerCase())
+                                  )
+                                )
+                                : extractorSummary.key_value_pairs,
+                              null,
+                              2
+                            )}
+                          </pre>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Extracted Financial Tables View */}
+                    {extractorSummary.tables && extractorSummary.tables.length > 0 && (
+                      <div className="space-y-4">
+                        <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                          📊 PyMuPDF Extracted Financial Tables ({extractorSummary.tables.length})
+                        </h4>
+                        {extractorSummary.tables.map((tbl, tIdx) => (
+                          <div key={tIdx} className="overflow-x-auto rounded-2xl border border-slate-200 shadow-xs bg-white p-4 space-y-2">
+                            <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
+                              <span>Table #{tbl.table_id || tIdx + 1} (Page {tbl.page || 1})</span>
+                            </div>
+                            <table className="w-full text-xs text-left border-collapse">
+                              {tbl.headers && tbl.headers.length > 0 && (
+                                <thead className="bg-slate-100 text-slate-800 uppercase font-bold text-[10px] tracking-wider border-b border-slate-200">
+                                  <tr>
+                                    {tbl.headers.map((h, hIdx) => (
+                                      <th key={hIdx} className="px-3.5 py-2.5 border-b border-slate-200 font-extrabold uppercase">{h}</th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                              )}
+                              <tbody className="divide-y divide-slate-150 font-semibold text-slate-700">
+                                {tbl.rows && tbl.rows.map((row, rIdx) => (
+                                  <tr key={rIdx} className={rIdx % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-slate-50 hover:bg-slate-100'}>
+                                    {row.map((cell, cIdx) => (
+                                      <td key={cIdx} className="px-3.5 py-2.5 border-b border-slate-100">
+                                        {cell}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
 
 
         </div>
