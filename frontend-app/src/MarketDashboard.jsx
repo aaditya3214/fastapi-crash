@@ -218,6 +218,9 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
   const [extractorDragActive, setExtractorDragActive] = useState(false);
   const [extractorJsonViewMode, setExtractorJsonViewMode] = useState('grid');
   const [extractorJsonSearchQuery, setExtractorJsonSearchQuery] = useState('');
+  const [selectedDoclingPage, setSelectedDoclingPage] = useState(1);
+  const [doclingSearchQuery, setDoclingSearchQuery] = useState('');
+  const [doclingCopySuccess, setDoclingCopySuccess] = useState(false);
   const [extractorSaveState, setExtractorSaveState] = useState('idle');
 
   const handleExtractorFileUpload = async (fileToProcess) => {
@@ -306,24 +309,22 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
 
   const handleExtractorExportJson = () => {
     if (!extractorSummary) return;
-    const title = extractorSummary.title || 'Extracted_Earnings_Data';
-    const jsonData = {
+    const title = extractorSummary.title || extractorSummary.filename || 'Docling_Extracted_Earnings_Data';
+    const payloadToExport = extractorSummary.docling_json_data || {
       title: extractorSummary.title,
       filename: extractorSummary.filename,
-      key_numbers: extractorSummary.key_numbers,
       key_value_pairs: extractorSummary.key_value_pairs,
-      pymupdf_json_data: extractorSummary.pymupdf_json_data,
-      sections: extractorSummary.sections,
-      markdown_report: extractorSummary.markdown_report
     };
 
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(jsonData, null, 2));
+    const jsonBlob = new Blob([JSON.stringify(payloadToExport, null, 2)], { type: 'application/json' });
+    const blobUrl = URL.createObjectURL(jsonBlob);
     const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `${title.replace(/[^a-zA-Z0-9_-]/g, '_')}_PyMuPDF.json`);
+    downloadAnchor.setAttribute("href", blobUrl);
+    downloadAnchor.setAttribute("download", `${title.replace(/[^a-zA-Z0-9_-]/g, '_')}_Docling_Extracted.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
+    URL.revokeObjectURL(blobUrl);
   };
 
   const handleExtractorSaveToDb = async () => {
@@ -1992,202 +1993,135 @@ export default function MarketDashboard({ onNavigate, profile, onLogout, onNavig
                 </div>
               )}
 
-              {/* Extracted Results View */}
+              {/* Extracted Results View - Docling JSON Data Only */}
               {extractorSummary && !extractorLoading && (
                 <div className="space-y-6 animate-fadeIn">
-                  {/* Action Bar & Metadata Header */}
-                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="px-2.5 py-0.5 bg-slate-100 text-slate-800 border border-slate-200 rounded text-[10px] font-black uppercase tracking-wider">
-                          Extracted Earnings Analysis
-                        </span>
-                        <h2 className="text-base font-black text-slate-900">
-                          {extractorSummary.title || extractorSummary.filename || 'Presentation Extraction'}
-                        </h2>
-                      </div>
-                      <p className="text-xs text-slate-400 font-semibold mt-1">
-                        {extractorSummary.filename || 'Uploaded Document'} · {extractorSummary.file_type || 'PDF'} · {extractorSummary.pages_or_slides || '?'} pages processed
-                      </p>
-                    </div>
+                  {/* Docling Page-by-Page Clean JSON Section */}
+                  {extractorSummary.docling_json_data && (
+                    <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-3 border-b border-slate-150 gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="px-2.5 py-0.5 bg-slate-900 text-white rounded text-[10px] font-black uppercase tracking-wider">
+                            Docling Engine
+                          </span>
+                          <h4 className="text-xs font-black text-slate-800">
+                            Extracted JSON Data ({extractorSummary.docling_json_data.total_pages || 0} Pages)
+                          </h4>
 
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={handleExtractorExportPdf}
-                        className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300/80 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
-                      >
-                        📄 Download PDF Report
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleExtractorExportJson}
-                        className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300/80 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
-                      >
-                        📊 Download JSON Data
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleExtractorSaveToDb}
-                        disabled={extractorSaveState === 'saving'}
-                        className={`px-3.5 py-2 font-bold rounded-xl text-xs transition-all cursor-pointer shadow-sm flex items-center gap-1.5 ${
-                          extractorSaveState === 'saved'
-                            ? 'bg-emerald-600 text-white'
-                            : extractorSaveState === 'saving'
-                              ? 'bg-amber-500 text-white'
-                              : 'bg-slate-800 hover:bg-slate-900 text-white'
-                        }`}
-                      >
-                        {extractorSaveState === 'saved' ? '✓ Saved to Database' : extractorSaveState === 'saving' ? '⏳ Saving...' : '💾 Save to DB'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setExtractorSummary(null); setExtractorFile(null); }}
-                        className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl text-xs transition-all cursor-pointer"
-                      >
-                        Upload Another
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Render Extracted Report Body */}
-                  <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6">
-                    {extractorSummary.markdown_report ? (
-                      renderMarkdown(extractorSummary.markdown_report)
-                    ) : (
-                      <>
-                        {/* Key Numbers */}
-                        {extractorSummary.key_numbers && extractorSummary.key_numbers.length > 0 && (
-                          <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
-                            <span className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">Key Figures Identified</span>
-                            <div className="flex flex-wrap gap-2">
-                              {extractorSummary.key_numbers.map((num, i) => (
-                                <span key={i} className="px-2.5 py-1 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-800 shadow-xs">{num}</span>
+                          <div className="flex items-center gap-1.5 ml-2">
+                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Select Page:</span>
+                            <select
+                              value={selectedDoclingPage}
+                              onChange={(e) => setSelectedDoclingPage(Number(e.target.value))}
+                              className="px-3 py-1 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-800 focus:outline-none focus:border-slate-400 cursor-pointer shadow-2xs"
+                            >
+                              {(extractorSummary.docling_json_data.pages_data || []).map((p) => (
+                                <option key={p.page_number} value={p.page_number}>
+                                  Page {p.page_number}
+                                </option>
                               ))}
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    )}
-
-                    {/* Key-Value Pairs Extraction Section */}
-                    {extractorSummary.key_value_pairs && Object.keys(extractorSummary.key_value_pairs).length > 0 && (
-                      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-3">
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-3 border-b border-slate-150 gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className="px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded text-[10px] font-black uppercase tracking-wider">
-                              PyMuPDF Complete Extraction
-                            </span>
-                            <h4 className="text-xs font-black text-slate-800">Extracted Key-Value Parameters</h4>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-[10px] text-slate-400 font-bold">
-                              {Object.keys(extractorSummary.key_value_pairs).length} fields extracted
-                            </span>
-                            <div className="flex items-center bg-slate-100 rounded-lg p-0.5 border border-slate-200">
-                              <button
-                                onClick={() => setExtractorJsonViewMode('grid')}
-                                className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                                  extractorJsonViewMode === 'grid' ? 'bg-white text-slate-900 border border-slate-200 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'
-                                }`}
-                              >
-                                Grid View
-                              </button>
-                              <button
-                                onClick={() => setExtractorJsonViewMode('raw')}
-                                className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                                  extractorJsonViewMode === 'raw' ? 'bg-white text-slate-900 border border-slate-200 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'
-                                }`}
-                              >
-                                Raw JSON
-                              </button>
-                            </div>
+                            </select>
                           </div>
                         </div>
 
-                        {/* Search Filter for Key-Value Pairs */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={handleExtractorExportJson}
+                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300/80 font-extrabold rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95"
+                          >
+                            📊 Download JSON File
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                const area = document.getElementById('docling-complete-json-textarea');
+                                if (area) {
+                                  area.select();
+                                  await navigator.clipboard.writeText(area.value);
+                                }
+                                setDoclingCopySuccess(true);
+                                setTimeout(() => setDoclingCopySuccess(false), 2000);
+                              } catch (cErr) {
+                                console.error('Clipboard copy failed:', cErr);
+                              }
+                            }}
+                            className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs flex items-center gap-1.5 border border-slate-300/80 ${
+                              doclingCopySuccess
+                                ? 'bg-slate-200 text-slate-900 border-slate-400 scale-95'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-800 active:scale-95'
+                            }`}
+                          >
+                            {doclingCopySuccess ? '✓ Copied Page JSON!' : '📋 Copy Page JSON'}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => { setExtractorSummary(null); setExtractorFile(null); }}
+                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-300/80 font-extrabold rounded-xl text-xs transition-all cursor-pointer shadow-xs active:scale-95"
+                          >
+                            Upload Another
+                          </button>
+                        </div>
+                      </div>
+
+                        {/* Search Filter Across Current Page JSON */}
                         <div>
                           <input
                             type="text"
-                            placeholder="Filter extracted fields (e.g. Revenue, EBITDA, PAT, EPS)..."
-                            value={extractorJsonSearchQuery}
-                            onChange={(e) => setExtractorJsonSearchQuery(e.target.value)}
-                            className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-400 focus:bg-white transition-colors"
+                            placeholder="Filter JSON content on active page (e.g. Revenue, PAT, EBITDA, Margin)..."
+                            value={doclingSearchQuery}
+                            onChange={(e) => setDoclingSearchQuery(e.target.value)}
+                            className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-400 focus:bg-white transition-colors select-text"
                           />
                         </div>
 
-                        {extractorJsonViewMode === 'grid' ? (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-96 overflow-y-auto pr-1 custom-scrollbar-light">
-                            {Object.entries(extractorSummary.key_value_pairs)
-                              .filter(([k, v]) =>
-                                !extractorJsonSearchQuery ||
-                                k.toLowerCase().includes(extractorJsonSearchQuery.toLowerCase()) ||
-                                String(v).toLowerCase().includes(extractorJsonSearchQuery.toLowerCase())
-                              )
-                              .map(([key, val], idx) => (
-                                <div key={idx} className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-col justify-between gap-1 hover:bg-slate-100/80 transition-colors">
-                                  <span className="text-[10px] text-slate-500 font-bold uppercase truncate" title={key}>{key}</span>
-                                  <span className="text-xs font-black text-slate-900 break-words">{String(val)}</span>
-                                </div>
-                              ))}
-                          </div>
-                        ) : (
-                          <pre className="text-xs text-slate-800 font-mono bg-slate-50 p-4 rounded-xl border border-slate-200 max-h-96 overflow-auto whitespace-pre-wrap select-all custom-scrollbar-light">
-                            {JSON.stringify(
-                              extractorJsonSearchQuery
-                                ? Object.fromEntries(
-                                  Object.entries(extractorSummary.key_value_pairs).filter(([k, v]) =>
-                                    k.toLowerCase().includes(extractorJsonSearchQuery.toLowerCase()) ||
-                                    String(v).toLowerCase().includes(extractorJsonSearchQuery.toLowerCase())
-                                  )
-                                )
-                                : extractorSummary.key_value_pairs,
-                              null,
-                              2
-                            )}
-                          </pre>
-                        )}
-                      </div>
-                    )}
+                        {/* Page-by-Page Clean JSON Viewer (without markdown, key_value_pairs, or tables) */}
+                        {(() => {
+                          const allPages = extractorSummary.docling_json_data.pages_data || [];
+                          const activeRawPage = allPages.find((p) => p.page_number === selectedDoclingPage) || allPages[0] || {};
 
-                    {/* Extracted Financial Tables View */}
-                    {extractorSummary.tables && extractorSummary.tables.length > 0 && (
-                      <div className="space-y-4">
-                        <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                          📊 PyMuPDF Extracted Financial Tables ({extractorSummary.tables.length})
-                        </h4>
-                        {extractorSummary.tables.map((tbl, tIdx) => (
-                          <div key={tIdx} className="overflow-x-auto rounded-2xl border border-slate-200 shadow-xs bg-white p-4 space-y-2">
-                            <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
-                              <span>Table #{tbl.table_id || tIdx + 1} (Page {tbl.page || 1})</span>
+                          // Clean page data: Strip out markdown, key_value_pairs, and tables
+                          const { markdown, key_value_pairs, tables, ...cleanedPageData } = activeRawPage;
+
+                          let displayPageData = cleanedPageData;
+
+                          if (doclingSearchQuery.trim()) {
+                            const query = doclingSearchQuery.toLowerCase();
+                            const filteredLines = (cleanedPageData.text_lines || []).filter((line) =>
+                              line.toLowerCase().includes(query)
+                            );
+
+                            displayPageData = {
+                              ...cleanedPageData,
+                              text_lines_matching_search: filteredLines.length,
+                              text_lines: filteredLines
+                            };
+                          }
+
+                          const formattedJsonStr = JSON.stringify(displayPageData, null, 2);
+
+                          return (
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 px-1">
+                                <span>Showing Page {activeRawPage.page_number || selectedDoclingPage} clean JSON data</span>
+                                <span>{doclingSearchQuery ? `Filtered by "${doclingSearchQuery}"` : 'Clean format (No markdown / key_value_pairs / tables)'}</span>
+                              </div>
+
+                              <textarea
+                                id="docling-complete-json-textarea"
+                                readOnly
+                                value={formattedJsonStr}
+                                onClick={(e) => e.target.select()}
+                                className="w-full h-[520px] p-5 bg-slate-50 text-slate-800 font-mono text-xs border border-slate-200 rounded-2xl focus:outline-none focus:border-slate-400 select-all cursor-text custom-scrollbar-light"
+                              />
                             </div>
-                            <table className="w-full text-xs text-left border-collapse">
-                              {tbl.headers && tbl.headers.length > 0 && (
-                                <thead className="bg-slate-100 text-slate-800 uppercase font-bold text-[10px] tracking-wider border-b border-slate-200">
-                                  <tr>
-                                    {tbl.headers.map((h, hIdx) => (
-                                      <th key={hIdx} className="px-3.5 py-2.5 border-b border-slate-200 font-extrabold uppercase">{h}</th>
-                                    ))}
-                                  </tr>
-                                </thead>
-                              )}
-                              <tbody className="divide-y divide-slate-150 font-semibold text-slate-700">
-                                {tbl.rows && tbl.rows.map((row, rIdx) => (
-                                  <tr key={rIdx} className={rIdx % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-slate-50 hover:bg-slate-100'}>
-                                    {row.map((cell, cIdx) => (
-                                      <td key={cIdx} className="px-3.5 py-2.5 border-b border-slate-100">
-                                        {cell}
-                                      </td>
-                                    ))}
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        ))}
+                          );
+                        })()}
                       </div>
                     )}
-                  </div>
                 </div>
               )}
             </div>

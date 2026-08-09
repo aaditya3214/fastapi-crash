@@ -2515,13 +2515,123 @@ def extract_pdf_data(pdf_path: str) -> dict:
     return extract_pymupdf_json_data(file_bytes, source_filename=pdf_path)
 
 
+def extract_docling_json_data(file_bytes: bytes, filename: str = "document.pdf") -> dict:
+    """
+    Extract document text, layout, and tables page-by-page using Docling
+    (with fitz/PyPDF fallbacks) and return structured page-by-page JSON.
+    """
+    import tempfile
+    import os
+    import re
+
+    docling_result = {
+        "status": "success",
+        "engine": "docling",
+        "filename": filename,
+        "total_pages": 0,
+        "pages_data": [],
+        "all_key_value_pairs": {}
+    }
+
+    tmp_path = None
+    try:
+        ext = ".pptx" if filename.lower().endswith(".pptx") else ".pdf"
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+            tmp.write(file_bytes)
+            tmp_path = tmp.name
+
+        try:
+            from docling.document_converter import DocumentConverter
+            converter = DocumentConverter()
+            conversion_res = converter.convert(tmp_path)
+            doc_obj = conversion_res.document
+            
+            overall_markdown = doc_obj.export_to_markdown()
+
+            pages_list = []
+            if hasattr(doc_obj, 'pages') and doc_obj.pages:
+                for p_num, p_obj in doc_obj.pages.items():
+                    p_md = getattr(p_obj, 'text', '') or f"Page {p_num}"
+                    pages_list.append((p_num, p_md))
+            else:
+                raw_pages = re.split(r'(?i)\[(?:Page|Slide)\s*(\d+)\]', overall_markdown)
+                if len(raw_pages) > 1:
+                    for i in range(1, len(raw_pages), 2):
+                        p_num = int(raw_pages[i])
+                        p_content = raw_pages[i+1].strip() if i+1 < len(raw_pages) else ""
+                        pages_list.append((p_num, p_content))
+
+            if not pages_list:
+                pages_list = [(1, overall_markdown)]
+
+            docling_result["total_pages"] = len(pages_list)
+            for p_num, p_text in pages_list:
+                p_kv = {}
+                for line in p_text.splitlines():
+                    if ":" in line:
+                        parts = line.split(":", 1)
+                        k, v = parts[0].strip(), parts[1].strip()
+                        if 2 <= len(k) <= 60 and 1 <= len(v) <= 100 and not k.startswith("#"):
+                            p_kv[k] = v
+
+                docling_result["pages_data"].append({
+                    "page_number": p_num,
+                    "markdown": p_text,
+                    "key_value_pairs": p_kv,
+                    "tables": [],
+                    "text_lines": [l.strip() for l in p_text.splitlines() if l.strip()]
+                })
+                docling_result["all_key_value_pairs"].update(p_kv)
+
+        except Exception as docling_err:
+            print(f"Docling note: {docling_err}, using fallback page extractor.")
+            try:
+                import fitz
+                pdf_doc = fitz.open(stream=file_bytes, filetype="pdf" if ext == ".pdf" else "pptx")
+                docling_result["engine"] = "fitz_docling_fallback"
+                docling_result["total_pages"] = len(pdf_doc)
+                
+                for page_idx in range(len(pdf_doc)):
+                    page = pdf_doc[page_idx]
+                    p_num = page_idx + 1
+                    text = page.get_text("text") or ""
+                    
+                    p_kv = {}
+                    for line in text.splitlines():
+                        if ":" in line:
+                            parts = line.split(":", 1)
+                            k, v = parts[0].strip(), parts[1].strip()
+                            if 2 <= len(k) <= 60 and 1 <= len(v) <= 100:
+                                p_kv[k] = v
+                                
+                    docling_result["pages_data"].append({
+                        "page_number": p_num,
+                        "markdown": f"## Page {p_num}\n\n" + text,
+                        "key_value_pairs": p_kv,
+                        "tables": [],
+                        "text_lines": [l.strip() for l in text.splitlines() if l.strip()]
+                    })
+                    docling_result["all_key_value_pairs"].update(p_kv)
+                pdf_doc.close()
+            except Exception as fitz_err:
+                print(f"Fallback page extraction error: {fitz_err}")
+
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+    return docling_result
+
 
 @app.post("/api/summarize-uploaded-pdf")
 async def summarize_uploaded_pdf(file: UploadFile = File(...), db: Session = Depends(get_db)):
     """
     Accept a user-uploaded PDF or PPTX file and return a deeply structured,
     investment-grade AI summary styled as a Quarterly Earnings Analysis Report.
-    Includes PyMuPDF extracted JSON key-value pairs.
+    Includes PyMuPDF extracted JSON key-value pairs and Docling page-by-page JSON data.
     """
     import io
     import re
@@ -2628,9 +2738,14 @@ async def summarize_uploaded_pdf(file: UploadFile = File(...), db: Session = Dep
     # PyMuPDF structured JSON key-value extraction
     pymupdf_json_data = extract_pymupdf_json_data(file_bytes) if file_ext == "pdf" else {}
 
+    # Docling Page-by-Page JSON Extraction
+    docling_json_data = extract_docling_json_data(file_bytes, filename=file.filename or "uploaded.pdf")
+
     combined_kv = dict(report_data.get("key_value_pairs", {}))
     if pymupdf_json_data.get("key_value_pairs"):
         combined_kv.update(pymupdf_json_data["key_value_pairs"])
+    if docling_json_data.get("all_key_value_pairs"):
+        combined_kv.update(docling_json_data["all_key_value_pairs"])
     
     clean_kv = sanitize_json_kv(combined_kv)
     pymupdf_json_data["key_value_pairs"] = clean_kv
@@ -2646,6 +2761,7 @@ async def summarize_uploaded_pdf(file: UploadFile = File(...), db: Session = Dep
             "sections": report_data["sections"],
             "markdown_report": report_data["markdown_report"],
             "pymupdf_json_data": pymupdf_json_data,
+            "docling_json_data": docling_json_data,
             "key_value_pairs": clean_kv,
             "is_earnings_report": True,
             "source": "uploaded_file",
